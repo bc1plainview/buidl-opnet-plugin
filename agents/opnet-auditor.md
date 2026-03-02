@@ -48,7 +48,69 @@ This contains the full OPNet security checklist, all 11 critical runtime vulnera
 
 ## Audit Process
 
-### 1. Inventory All Source Files
+### 1. Real-Bug Pattern Scan (MANDATORY — 27 Checks)
+
+Before any domain-specific audit, systematically scan ALL code against these 27 confirmed vulnerability patterns from real OPNet bugs. For each finding, cite the pattern ID and the original bug PR.
+
+**SERIALIZATION (5 checks):**
+- [ ] **PAT-S1 [CRITICAL]** Generic integer read — Search for `value[0] as T` in any generic read path. Must use `BytesReader.read<T>()`.
+- [ ] **PAT-S2 [CRITICAL]** BytesReader offset — Every `readUXX()`/`writeUXX()` must access `currentOffset` (not `currentOffset + BYTE_LENGTH`) and increment AFTER.
+- [ ] **PAT-S3 [HIGH]** Save/load type matrix — Build a matrix: every `writeUXX()` in `save()` must pair with matching `readUXX()` in `load()`.
+- [ ] **PAT-S4 [HIGH]** Hex stripping — Search for `.replace('0x','')`. Must use `startsWith('0x') ? slice(2) : str`.
+- [ ] **PAT-S5 [MEDIUM]** Integer narrowing — Every `writeU16(x)`/`writeU8(x)` where `x` is wider must have explicit cast.
+
+**STORAGE / POINTERS (3 checks):**
+- [ ] **PAT-P1 [CRITICAL]** Key concatenation — No `` `${a}${b}` `` without delimiter. Must use length-prefix: `` `${a.length}:${a}${b.length}:${b}` ``.
+- [ ] **PAT-P2 [HIGH]** encodePointer — No conditional `typed.length !== 32 ? hash(typed) : typed` bypass. Always hash.
+- [ ] **PAT-P3 [HIGH]** verifyEnd — Condition must check `size > buffer.byteLength`, not `currentOffset > buffer.byteLength`.
+
+**ARITHMETIC / AMM (4 checks):**
+- [ ] **PAT-A1 [HIGH]** Math zero return — `log(0)`, `sqrt(-1)` etc. must `throw new Revert()`, not `return u256.Zero`.
+- [ ] **PAT-A2 [CRITICAL]** AMM constant-product — Reserve updates must derive from k invariant (`B = k/T`), not independent `B += dB`.
+- [ ] **PAT-A3 [CRITICAL]** Proportional purge — Token removal from virtual reserves must have paired proportional BTC removal.
+- [ ] **PAT-L2 [HIGH]** Trade accumulator — Must verify `totalAccumulated + newAmount < projectedReserve` before incrementing.
+
+**ACCESS CONTROL / CRYPTO (4 checks):**
+- [ ] **PAT-C1 [CRITICAL]** Signature nonce — All off-chain signed payloads must include per-address monotonic nonce. Increment after success.
+- [ ] **PAT-C2 [HIGH]** Selector types — Every `encodeSelector('...')` type string cross-checked against actual AS parameter types.
+- [ ] **PAT-C3 [CRITICAL]** Decrypt null return — Decrypt must return `T | null`, NEVER the original ciphertext on failure.
+- [ ] **PAT-C4 [HIGH]** EC pubkey prefix — 33-byte: `buf[0] in {0x02, 0x03}`. 65-byte: `buf[0] === 0x04`. Length alone is insufficient.
+
+**BUSINESS LOGIC (2 checks):**
+- [ ] **PAT-L1 [CRITICAL]** CEI activation order — Provider activation (reading liquidity) must occur BEFORE any subtract on that provider's liquidity.
+- [ ] **PAT-L3 [HIGH]** UTXO commitment — `reportUTXOUsed()` must only appear in confirmed-success paths, never after success/failure branches merge.
+
+**MEMORY / BOUNDS (2 checks):**
+- [ ] **PAT-M1 [HIGH]** Array push off-by-one — `> MAX` must be `>= MAX` for 0-indexed arrays.
+- [ ] **PAT-M2 [HIGH]** Memory padding — Padding base = `bytes_written`, not `source_buffer.len()`.
+
+**GAS / RUNTIME (2 checks):**
+- [ ] **PAT-G1 [HIGH]** Gas capture — `get_used_gas()` called BEFORE `ExitData::new()` in every VM exit handler.
+- [ ] **PAT-G2 [CRITICAL]** Mutex deadlock — No `mutex.lock()` ... `mutex.lock()` on same mutex in same async scope.
+
+**NETWORKING / INDEXER (2 checks):**
+- [ ] **PAT-N1 [HIGH]** Null-safe Buffer — `x ? Buffer.from(x, 'hex') : fallback`, not `Buffer.from(x, 'hex') || fallback`.
+- [ ] **PAT-N2 [HIGH]** Promise resolve in loop — `resolve(item); return;` inside the loop, not deferred after the loop.
+
+**TYPE SAFETY (3 checks):**
+- [ ] **PAT-T1 [MEDIUM]** Abstract return types — Must exactly match the interface specification.
+- [ ] **PAT-T2 [MEDIUM]** Browser ECPair RNG — Must provide custom `rng: (size) => Buffer.from(randomBytes(size))`.
+- [ ] **PAT-T3 [MEDIUM]** Variable reassignment — Preserve original reference before reassigning for fallback lookups.
+
+**All 27 patterns are documented with code examples in `knowledge/slices/security-audit.md` under "Real-Bug Vulnerability Patterns".**
+
+For each finding, output:
+```
+**[SEVERITY] PAT-XX: Title**
+- File: path/to/file.ts
+- Line: N
+- Evidence: the actual code fragment
+- Impact: what can go wrong
+- Fix: specific remediation
+- Ref: original bug PR
+```
+
+### 2. Inventory All Source Files
 Use Glob to find all source files:
 - `**/*.ts` in contract directories
 - `**/*.tsx` and `**/*.ts` in frontend directories
@@ -56,7 +118,7 @@ Use Glob to find all source files:
 - `package.json` files (check dependencies)
 - Config files (asconfig.json, vite.config.ts, tsconfig.json)
 
-### 2. Smart Contract Audit (if contracts exist)
+### 3. Smart Contract Audit (if contracts exist)
 
 Check EACH item:
 
@@ -101,7 +163,7 @@ Check EACH item:
 - [ ] Return types properly annotated with `@returns`
 - [ ] Selector encoding uses SHA-256 (not Keccak-256)
 
-### 3. Frontend Audit (if frontend exists)
+### 4. Frontend Audit (if frontend exists)
 
 Check EACH item:
 
@@ -123,7 +185,7 @@ Check EACH item:
 - [ ] Amount inputs validated (positive, within bounds, proper decimal handling)
 - [ ] Address inputs validated with `AddressVerificator`
 
-### 4. Backend Audit (if backend exists)
+### 5. Backend Audit (if backend exists)
 
 Check EACH item:
 - [ ] `signer: wallet.keypair` and `mldsaSigner: wallet.mldsaKeypair` in `sendTransaction()` -- REQUIRED
@@ -133,13 +195,13 @@ Check EACH item:
 - [ ] No SQL injection / command injection vectors
 - [ ] Error handling doesn't expose internal state
 
-### 5. Cross-Layer Checks
+### 6. Cross-Layer Checks
 - [ ] Same network configuration across all layers
 - [ ] Contract address consistent between frontend config and actual deployment
 - [ ] ABI methods called in frontend actually exist in contract
 - [ ] No `Buffer` anywhere in the codebase
 
-### 6. Known Vulnerability Patterns (from Incident Reports)
+### 7. Known Vulnerability Patterns (from Incident Reports)
 
 Check for these specific patterns found in past audits:
 - `u256To30Bytes` storage key collision (INC-mm8bv87s): truncating small values loses significant bits
@@ -167,6 +229,7 @@ LOW:
 [category] file:line -- Description -> Suggested fix
 
 AUDIT SUMMARY:
+- Real-bug patterns checked: 27/27
 - Contract methods audited: [N]
 - Frontend components audited: [N]
 - Backend endpoints audited: [N]

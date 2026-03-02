@@ -379,6 +379,408 @@ FIX: Do NOT import. Use ABIDataTypes.ADDRESS, @method(...) etc. directly.
 
 ---
 
+## Real-Bug Vulnerability Patterns (27 Confirmed Bugs)
+
+> Derived from real bugs found in btc-vision GitHub repos: btc-runtime, native-swap, opnet, opnet-node, op-vm, transaction.
+> Each pattern has a PAT-XX ID, severity, detection rule, fix, and PR reference.
+
+### SERIALIZATION / ENCODING
+
+#### PAT-S1: Generic integer deserialization reads only first byte [CRITICAL]
+
+When a generic `toValue<T>()` or read method uses `value[0] as T` instead of `BytesReader.read<T>()`, only the low byte of any integer is returned. A balance of 1,000,000 reads back as 64.
+
+- **Detection:** grep `value[0] as T` or `arr[0] as T` in generic read methods
+- **Fix:** Use `new BytesReader(value).read<T>()` — reads the correct byte width for the type
+- **Real bug:** btc-runtime PR #137
+
+```typescript
+// BROKEN — only reads low byte regardless of type
+toValue<T>(): T { return this.value[0] as T; } // 1,000,000 → 64
+
+// FIXED — reads correct byte width
+toValue<T>(): T { return new BytesReader(this.value).read<T>(); }
+```
+
+#### PAT-S2: BytesReader/BytesWriter off-by-one — reads at offset+N instead of offset [CRITICAL]
+
+`readU8()` / `writeU8()` used `currentOffset + U8_BYTE_LENGTH` as the index instead of `currentOffset`, and failed to advance `currentOffset`. All u8 fields in serialized structs were corrupted.
+
+- **Detection:** grep `getUint8(.*\+ U8_BYTE_LENGTH)` or `setUint8(.*\+ U8_BYTE_LENGTH)`
+- **Fix:** Read/write at `currentOffset`, then `currentOffset += BYTE_LENGTH`
+- **Real bug:** btc-runtime PR #57
+
+```typescript
+// BROKEN — reads at wrong offset, never advances
+readU8(): u8 { return this.buffer.getUint8(this.currentOffset + U8_BYTE_LENGTH); }
+
+// FIXED — reads at currentOffset, then advances
+readU8(): u8 {
+    const val = this.buffer.getUint8(this.currentOffset);
+    this.currentOffset += U8_BYTE_LENGTH;
+    return val;
+}
+```
+
+#### PAT-S3: Write/read type mismatch in save/load — upper bytes silently truncated [HIGH]
+
+`save()` writes a field as `writeU64()` but `load()` reads it as `readU32()`. The upper 4 bytes are discarded silently.
+
+- **Detection:** Build a write/read type matrix for every `save()`/`load()` pair
+- **Fix:** Use consistent types; prefer the smaller type that fits the data range
+- **Real bug:** btc-runtime PR #88
+
+#### PAT-S4: `.replace('0x', '')` corrupts hex strings [HIGH]
+
+JavaScript's `String.replace(string, string)` replaces only the FIRST occurrence. If the hex data contains `0x`, this strips it from the wrong position.
+
+- **Detection:** grep `.replace('0x', '')` — 100% of occurrences should be replaced
+- **Fix:** `str.startsWith('0x') ? str.slice(2) : str`
+- **Real bug:** opnet PR #135
+
+```typescript
+// BROKEN — replaces first '0x' occurrence anywhere in string
+const clean = hex.replace('0x', '');
+
+// FIXED — only strips leading prefix
+const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+```
+
+#### PAT-S5: Implicit integer narrowing in write calls [MEDIUM]
+
+`writeU16(value.length)` where `value.length` is `i32` — AssemblyScript may silently truncate.
+
+- **Detection:** grep all `writeU16(`, `writeU8(`, `writeU32(` and verify argument type exactly matches
+- **Fix:** Explicit cast: `writeU16(u16(value.length))`
+- **Real bug:** btc-runtime PR #52
+
+---
+
+### STORAGE / POINTER
+
+#### PAT-P1: KeyMerger string key collision — no length prefix [CRITICAL]
+
+Concatenating `parentKey + childKey` as plain strings is ambiguous: `("abc","def")` and `("ab","cdef")` both produce `"abcdef"`. Different logical entries write to the same storage slot.
+
+- **Detection:** Template literals joining two keys: `` `${this.parentKey}${key}` `` with no separator
+- **Fix:** Length-prefix both segments: `` `${a.length}:${a}${b.length}:${b}` ``
+- **Real bug:** btc-runtime PR #61 (KeyMerger)
+
+```typescript
+// BROKEN — ("abc","def") collides with ("ab","cdef")
+const storageKey = `${this.parentKey}${key}`;
+
+// FIXED — length-prefixed, unambiguous
+const storageKey = `${this.parentKey.length}:${this.parentKey}${key.length}:${key}`;
+```
+
+#### PAT-P2: encodePointer skips hashing for 32-byte inputs — pointer collision [HIGH]
+
+The optimization `typed.length !== 32 ? sha256(typed) : typed` bypasses hashing when input is exactly 32 bytes, assuming it's "already a hash." Attackers can craft 32-byte inputs that collide with any existing pointer.
+
+- **Detection:** Any conditional hash bypass based on input length
+- **Fix:** Always hash — `Sha256.hash(typed)` unconditionally
+- **Real bug:** btc-runtime PR #61 (encodePointer)
+
+#### PAT-P3: verifyEnd() checks current offset instead of projected end position [HIGH]
+
+`if (this.currentOffset > buffer.byteLength)` doesn't catch the read ABOUT TO happen.
+
+- **Detection:** In `verifyEnd(size)` methods, the condition must use `size` (the requested end), not `this.currentOffset`
+- **Fix:** `if (size > this.buffer.byteLength)`
+- **Real bug:** btc-runtime PR #60
+
+---
+
+### ARITHMETIC / AMM
+
+#### PAT-A1: Math functions silently return 0 on undefined inputs instead of reverting [HIGH]
+
+`log(0)`, `ln(0)`, `logRatio(0, x)` returning 0 masks caller bugs. Downstream code relying on monotonicity receives a wrong result without any error signal.
+
+- **Detection:** grep `if (x.isZero()) return u256.Zero` in math functions with mathematically undefined inputs
+- **Fix:** `throw new Revert('SafeMath: log of zero')` — fail fast and loud
+- **Real bug:** btc-runtime PR #129
+
+#### PAT-A2: AMM pool update uses additive formula instead of constant-product [CRITICAL]
+
+`T -= dT; B += dB` — the buy side BTC accumulation is independently added rather than derived from the k invariant. Over time, `k = B * T` drifts, allowing price manipulation.
+
+- **Detection:** Any AMM reserve flush that does independent add/subtract on both sides
+- **Fix:** After applying buys: `const k = B * T; T -= dT; B = k / T`
+- **Real bug:** native-swap PR #63
+
+```typescript
+// BROKEN — independent updates, k drifts
+virtualTokenReserve -= tokensOut;
+virtualBtcReserve += btcIn; // NOT derived from k
+
+// FIXED — k-invariant maintained
+const k = virtualBtcReserve * virtualTokenReserve;
+virtualTokenReserve -= tokensOut;
+virtualBtcReserve = k / virtualTokenReserve;
+```
+
+#### PAT-A3: Provider purge/slash removes tokens but not proportional BTC — k-drift [CRITICAL]
+
+Removing tokens from `virtualTokenReserve` without removing proportional BTC from `virtualSatoshisReserve` breaks the constant-product invariant after every purge.
+
+- **Detection:** Any `subFromVirtualTokenReserve()` call without a corresponding `subFromVirtualSatoshisReserve()` in the same path
+- **Fix:** Calculate `btcToRemove = (tokens * currentBTC) / currentTokens`, then remove both atomically
+- **Real bug:** native-swap PR #51
+
+#### PAT-L2: Trade accumulator allows pool exhaustion — no pre-condition check [HIGH]
+
+`recordTradeVolumes()` accumulated `tokensOut` without checking that total projected buys would still leave tokens in the virtual pool.
+
+- **Detection:** Any function that increments a batch trade accumulator without verifying `totalAccumulated + newAmount < projectedReserve`
+- **Fix:** Before incrementing: simulate the pool-update and reject if reserves would be exhausted
+- **Real bug:** native-swap PR #63
+
+---
+
+### ACCESS CONTROL / CRYPTO
+
+#### PAT-C1: approveFrom() missing replay protection nonce [CRITICAL]
+
+A signed off-chain approval that does not include a nonce can be replayed indefinitely. Attacker re-submits the old signature to re-set allowances even after the owner revoked them.
+
+- **Detection:** Any `verifySignature` call where the signed payload does not include a monotonically-increasing per-address nonce
+- **Fix:** Include `nonce` in the hash, verify `storedNonce == providedNonce`, then increment nonce atomically
+- **Real bug:** btc-runtime PR #60
+
+```typescript
+// BROKEN — no nonce, signature can be replayed forever
+const hash = sha256(encode(spender, amount, deadline));
+Blockchain.verifySignature(owner, signature, hash, false);
+
+// FIXED — nonce prevents replay
+const nonce = this.nonces.get(owner);
+const hash = sha256(encode(spender, amount, deadline, nonce));
+Blockchain.verifySignature(owner, signature, hash, false);
+this.nonces.set(owner, nonce + 1n);
+```
+
+#### PAT-C2: ABI selector computed from wrong type string [HIGH]
+
+`encodeSelector('approveFrom(address,uint256,uint64,bytes)')` when the actual parameter is `u256`. The on-chain selector doesn't match any client-generated selector, making the function unreachable.
+
+- **Detection:** Grep all `encodeSelector('...')` strings; cross-check every type against the actual AssemblyScript parameter types
+- **Fix:** Type strings in selectors must exactly match the canonical ABI types of the parameters
+- **Real bug:** btc-runtime PR #61, PR #60
+
+#### PAT-C3: Decryption failure silently returns original ciphertext [CRITICAL]
+
+A `decrypt()` function that returns the input bytes when decryption fails instead of `null`/error. The caller treats the ciphertext as valid plaintext — authentication bypass.
+
+- **Detection:** Any decrypt function that returns the original `msg` variable; return type should be `T | null`
+- **Fix:** Return `null` on decryption failure; callers must handle null explicitly
+- **Real bug:** opnet-node PR #192
+
+```typescript
+// BROKEN — returns encrypted bytes as if decryption succeeded
+public decrypt(msg: Uint8Array): Uint8Array {
+    const decrypted = this.#decrypt(data, ...);
+    if (decrypted !== null) { msg = decrypted; }
+    return msg; // BUG: returns original ciphertext on failure
+}
+
+// FIXED — returns null on failure
+public decrypt(msg: Uint8Array): Uint8Array | null {
+    return this.#decrypt(data, ...); // null if failed
+}
+```
+
+#### PAT-C4: Public key identified by length alone — scripts misidentified as keys [HIGH]
+
+Checking `buffer.length === 33 || buffer.length === 65` to identify EC public keys misidentifies P2WSH witness scripts (commonly 65 bytes starting with `0x21`).
+
+- **Detection:** Any code that treats a 33-byte or 65-byte buffer as a public key without checking the prefix byte
+- **Fix:** Validate prefix: `buf[0] in {0x02, 0x03}` for compressed (33B), `buf[0] === 0x04` for uncompressed (65B)
+- **Real bug:** opnet-node PR #225
+
+```typescript
+// BROKEN — length check only, misidentifies P2WSH scripts
+if (witness.length === 2 && secondWitnessLength === 65) {
+    return witness[1]; // Could be a script, not a pubkey!
+}
+
+// FIXED — validates EC prefix byte
+function isValidPublicKeyBuffer(buffer: Buffer, length: number): boolean {
+    if (length === 33) return buffer[0] === 0x02 || buffer[0] === 0x03;
+    if (length === 65) return buffer[0] === 0x04;
+    return false;
+}
+```
+
+---
+
+### BUSINESS LOGIC
+
+#### PAT-L1: Provider activation uses post-sale (reduced) liquidity for reserve calculation [CRITICAL]
+
+`activateProvider()` computes the "second 50%" of liquidity to add to virtual reserves, but was called AFTER `subtractFromLiquidityAmount()` — so it saw the already-reduced balance, producing a smaller reserve contribution.
+
+- **Detection:** Any function that reads `provider.getLiquidityAmount()` for initialization/reserve purposes must be called BEFORE any `subtract` / `decrease` on the same provider's liquidity in that trade path
+- **Fix:** Call activation before any liquidity subtraction
+- **Real bug:** native-swap PR #67
+
+#### PAT-L3: UTXO reported before trade state is committed [HIGH]
+
+`reportUTXOUsed()` appeared outside the success branch of a conditional, executing even for providers that were sent to the purge queue.
+
+- **Detection:** `reportUTXOUsed()` / `markUTXOSpent()` must only appear within confirmed-success code paths
+- **Fix:** Call UTXO commitment immediately at the point of fill confirmation, before the failure path branches
+- **Real bug:** native-swap PR #48
+
+---
+
+### MEMORY / BOUNDS
+
+#### PAT-M1: Array push() allows off-by-one overflow [HIGH]
+
+`if (this._length > this.MAX_LENGTH)` allows writing element at index `MAX_LENGTH` — one past the end. Adjacent storage is corrupted silently.
+
+- **Detection:** All array `push()` bounds checks: `> MAX` should be `>= MAX` for 0-indexed arrays
+- **Fix:** `if (this._length >= this.MAX_LENGTH) throw new Revert(...)`
+- **Real bug:** btc-runtime PR #61
+
+```typescript
+// BROKEN — allows one extra element
+if (this._length > this.MAX_LENGTH) throw new Revert('overflow');
+
+// FIXED — correct bound
+if (this._length >= this.MAX_LENGTH) throw new Revert('overflow');
+```
+
+#### PAT-M2: Memory padding written at wrong base pointer offset [HIGH]
+
+In a write-data-then-pad-to-length operation, padding start was calculated from `result_data.len()` instead of `bytes_actually_written`.
+
+- **Detection:** In "write slice + pad to length" functions, track `bytes_written = slice.len()`, use that as padding offset
+- **Fix:** `pad_ptr = base + bytes_written`, not `base + source_buffer.len()`
+- **Real bug:** op-vm PR #130
+
+---
+
+### GAS / RUNTIME
+
+#### PAT-G1: Gas usage not captured at VM exit — ExitData carries 0 gas [HIGH]
+
+`ExitData` was constructed without capturing gas before the exit handler ran. The gas field was stale/zero for failed executions.
+
+- **Detection:** In any VM `env_exit` / abort handler, ensure `get_used_gas()` is called BEFORE constructing `ExitData`
+- **Fix:** `let gas = instance.get_used_gas(&mut store); ExitData::new(status, gas, data)`
+- **Real bug:** op-vm PR #109
+
+```rust
+// BROKEN — ExitData constructed without gas info
+env.exit_data = ExitData::new(status, data.as_slice()); // gas unknown
+
+// FIXED — gas captured at exit time
+let gas_used = instance.get_used_gas(&mut store);
+env.exit_data = ExitData::new(status, gas_used, data.as_slice());
+```
+
+#### PAT-G2: Double mutex lock on same instance causes deadlock [CRITICAL]
+
+Acquiring `Mutex::lock()` twice on the same object within the same async task — once for execution, once for gas retrieval — deadlocks the runtime.
+
+- **Detection:** In Rust async code, search for `mutex.lock()` ... `mutex.lock()` on the same mutex within the same scope
+- **Fix:** Single lock; include gas in the execution return value
+- **Real bug:** op-vm PR #77
+
+```rust
+// BROKEN — deadlock: first lock still held when second lock attempted
+let mut contract = self.contract.lock().unwrap(); // lock #1
+let result = contract.execute(...);
+let gas_used = self.contract.lock().unwrap().get_used_gas(); // lock #2 DEADLOCK
+
+// FIXED — single lock, gas embedded in result
+let result = self.contract.lock().unwrap().execute(...); // includes gas_used
+let gas_used = result.gas_used;
+```
+
+---
+
+### NETWORKING / INDEXER
+
+#### PAT-N1: `Buffer.from(undefined, 'hex') || fallback` — `||` doesn't catch exceptions [HIGH]
+
+When `data.txid` is `undefined` (coinbase inputs), `Buffer.from(undefined, 'hex')` throws — `||` is not try/catch and the fallback is never evaluated.
+
+- **Detection:** grep `Buffer.from(x) || fallback` where `x` may be null/undefined
+- **Fix:** `x ? Buffer.from(x, 'hex') : Buffer.alloc(32)`
+- **Real bug:** opnet-node PR #218
+
+```typescript
+// BROKEN — throws if txid is undefined/null; || never evaluated
+this.originalTransactionId = Buffer.from(data.txid, 'hex') || Buffer.alloc(32);
+
+// FIXED — explicit null check
+this.originalTransactionId = data.txid ? Buffer.from(data.txid, 'hex') : Buffer.alloc(32);
+```
+
+#### PAT-N2: Promise resolve called after loop exits, not at the point of match [HIGH]
+
+A `do...while` search resolves a Promise AFTER the loop using `if (found) resolve(found)`. If the loop completes a full round without finding, `found` may point to the last-checked busy item.
+
+- **Detection:** Any `Promise` constructor where `resolve()` is called outside the loop that identifies the value
+- **Fix:** `resolve(item); return;` immediately at the point of matching inside the loop
+- **Real bug:** opnet-node PR #192
+
+```typescript
+// BROKEN — resolves after loop, may pick wrong vm
+if (!vmManager.busy() && vmManager.initiated) { break; }
+if (vmManager) { resolve(vmManager); } // could be wrong
+
+// FIXED — resolve immediately at point of match
+if (!vmManager.busy() && vmManager.initiated) {
+    resolve(vmManager); return;
+}
+```
+
+---
+
+### TYPE SAFETY
+
+#### PAT-T1: Abstract method return type mismatch breaks interface contract [MEDIUM]
+
+`verify()` declared as returning `boolean` instead of `Buffer` — any implementing class fails at runtime when callers expect a Buffer.
+
+- **Detection:** All `abstract` methods in classes that implement external library interfaces must have return types matching the interface exactly
+- **Fix:** Match return type to the interface specification
+- **Real bug:** transaction PR #86
+
+#### PAT-T2: ECPair default RNG breaks in browser — Uint8Array vs Buffer type mismatch [MEDIUM]
+
+`ECPair.makeRandom()` with default RNG returns a Web Crypto `Uint8Array`; the library expects a Node.js `Buffer`.
+
+- **Detection:** Any `ECPair.makeRandom()` call without a custom `rng` option in code that runs in browsers
+- **Fix:** Provide `rng: (size) => Buffer.from(randomBytes(size))` using `@noble/curves`
+- **Real bug:** transaction PR #109
+
+```typescript
+// BROKEN — default rng returns Uint8Array, ecpair wants Buffer
+const keyPair = this.ECPair.makeRandom({ network });
+
+// FIXED — explicit Buffer conversion
+const keyPair = this.ECPair.makeRandom({
+    network,
+    rng: (size: number): Buffer => Buffer.from(randomBytes(size)),
+});
+```
+
+#### PAT-T3: Event decoding reassigns variable and loses original reference [MEDIUM]
+
+`events = events[key]` then `events = events[p2tr]` — after the first assignment, `events` is no longer the original map. Fallback lookup indexes an already-overwritten value.
+
+- **Detection:** Any function that reassigns an input map variable and later uses it for fallback lookups
+- **Fix:** Preserve the original reference: `const orig = events; events = orig[key]; if (!ok) events = orig[fallbackKey]`
+- **Real bug:** opnet PR #78
+
+---
+
 ## Forbidden Patterns (Contract)
 
 ```
