@@ -1,0 +1,16 @@
+{
+  "description": "The Loop — iteration control for build-review cycles",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-hook.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

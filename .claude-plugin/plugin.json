@@ -1,0 +1,8 @@
+{
+  "name": "buidl",
+  "version": "2.0.0-opnet",
+  "description": "Full dev lifecycle for OP_NET Bitcoin L1 projects: idea → challenge → spec → build → review → ship. Includes the OP_NET Bible (2000+ lines of rules, patterns, and known mistakes) that prevents AI agents from hallucinating package versions, using forbidden patterns, or shipping exploitable code.",
+  "author": {
+    "name": "dannyplainview + bob"
+  }
+}
