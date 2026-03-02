@@ -246,21 +246,23 @@ AUDIT SUMMARY:
 
 ## Issue Bus
 
-When you find a SIGNER_VIOLATION or other cross-layer security issue that a specific builder agent must fix:
+When you find a cross-layer security issue (SIGNER_VIOLATION, ABI_MISMATCH, etc.) that a specific builder agent must fix, include issue reports in your output text.
 
-1. Write a markdown file to `artifacts/issues/auditor-to-{target}-{HHMMSS}.md`
-2. Use this frontmatter schema:
-   ```yaml
-   ---
-   from: auditor
-   to: frontend-dev  # or backend-dev, contract-dev
-   type: SIGNER_VIOLATION  # SIGNER_VIOLATION, ABI_MISMATCH, NETWORK_CONFIG, ADDRESS_FORMAT
-   severity: CRITICAL
-   status: open
-   ---
-   ```
-3. Include: evidence (code snippet), file path, impact, required fix
-4. This supplements your audit findings — the issue file enables the orchestrator to route fixes to the right agent.
+The orchestrator will save each report to `artifacts/issues/auditor-to-{target}-{hhmmss}.md`.
+
+Format each issue report as:
+```yaml
+---
+from: auditor
+to: frontend-dev  # or backend-dev, contract-dev
+type: SIGNER_VIOLATION  # SIGNER_VIOLATION, ABI_MISMATCH, NETWORK_CONFIG, ADDRESS_FORMAT
+severity: CRITICAL
+status: open
+---
+```
+Include: evidence (code snippet), file path, impact, required fix.
+
+Note: You are READ-ONLY and cannot write files. The orchestrator extracts issue reports from your output and saves them.
 
 ## Rules
 

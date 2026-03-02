@@ -34,14 +34,18 @@ STATE_FILE="$PROJECT_DIR/.claude/loop/state.local.md"
 # No state file = no loop running
 [[ ! -f "$STATE_FILE" ]] && exit 0
 
-# Parse state
-STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}')
-SESSION_NAME=$(grep '^session_name:' "$STATE_FILE" | head -1 | awk '{print $2}')
-CYCLE=$(grep '^cycle:' "$STATE_FILE" | head -1 | awk '{print $2}')
-MAX_CYCLES=$(grep '^max_cycles:' "$STATE_FILE" | head -1 | awk '{print $2}')
-PHASE=$(grep '^current_phase:' "$STATE_FILE" | head -1 | awk '{print $2}')
-PROJECT_TYPE=$(grep '^project_type:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo "generic")
-CURRENT_STEP=$(grep '^current_step:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo "0")
+# Parse state (allow graceful fallback if any field is missing)
+STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+SESSION_NAME=$(grep '^session_name:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+CYCLE=$(grep '^cycle:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+MAX_CYCLES=$(grep '^max_cycles:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+PHASE=$(grep '^current_phase:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+PROJECT_TYPE=$(grep '^project_type:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+
+# If critical fields are empty, state file is malformed — allow exit
+if [[ -z "$STATUS" || -z "$SESSION_NAME" || -z "$CYCLE" || -z "$MAX_CYCLES" ]]; then
+  exit 0
+fi
 
 # Only block exit during active loop phases
 case "$STATUS" in
@@ -84,14 +88,7 @@ STOP_MSG
   exit 0
 fi
 
-# Check for audit FAIL that needs re-routing (OPNet multi-agent flow)
-AUDIT_FINDINGS="$SESSION_DIR/artifacts/audit/findings.md"
-AUDIT_VERDICT=""
-if [[ -f "$AUDIT_FINDINGS" ]]; then
-  AUDIT_VERDICT=$(grep '^VERDICT:' "$AUDIT_FINDINGS" | head -1 | awk '{print $2}')
-fi
-
-# FAIL verdict or still in build phase — continue the loop
+# Continue the loop — increment cycle and re-inject prompt
 NEW_CYCLE=$((CYCLE + 1))
 sedi "s/^cycle:.*/cycle: $NEW_CYCLE/" "$STATE_FILE"
 sedi "s/^inner_retries:.*/inner_retries: 0/" "$STATE_FILE"

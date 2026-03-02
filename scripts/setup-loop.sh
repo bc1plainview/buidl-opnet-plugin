@@ -76,13 +76,11 @@ fi
 # Check for frontend indicators
 if [[ -f "$PROJECT_DIR/vite.config.ts" ]] || [[ -f "$PROJECT_DIR/vite.config.js" ]] || grep -q '"react"' "$PROJECT_DIR/package.json" 2>/dev/null; then
   COMPONENT_FRONTEND="true"
-  [[ "$PROJECT_TYPE" == "generic" ]] && PROJECT_TYPE="opnet"
 fi
 
 # Check for backend indicators
 if grep -q "hyper-express" "$PROJECT_DIR/package.json" 2>/dev/null || [[ -d "$PROJECT_DIR/server" ]] || [[ -d "$PROJECT_DIR/backend" ]]; then
   COMPONENT_BACKEND="true"
-  [[ "$PROJECT_TYPE" == "generic" ]] && PROJECT_TYPE="opnet"
 fi
 
 # Check OPNet packages in package.json
