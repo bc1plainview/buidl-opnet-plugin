@@ -104,7 +104,7 @@ if [[ -d "$ISSUES_DIR" ]]; then
   for issue_file in "$ISSUES_DIR"/*.md; do
     [[ -f "$issue_file" ]] || continue
     if grep -q "status: open" "$issue_file" 2>/dev/null; then
-      OPEN_ISSUES="${OPEN_ISSUES}\n--- $(basename "$issue_file") ---\n$(cat "$issue_file")\n"
+      OPEN_ISSUES="${OPEN_ISSUES}"$'\n'"--- $(basename "$issue_file") ---"$'\n'"$(cat "$issue_file")"$'\n'
     fi
   done
 fi
