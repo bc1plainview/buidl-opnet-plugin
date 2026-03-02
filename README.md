@@ -26,7 +26,7 @@ claude --plugin-dir /path/to/buidl-opnet-plugin/buidl
 Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-alias claudeyproj="claude --plugin-dir /path/to/buidl-opnet-plugin/buidl"
+alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/buidl-opnet-plugin/buidl"
 ```
 
 Then start with:
@@ -35,7 +35,9 @@ Then start with:
 claudeyproj
 ```
 
-The `--plugin-dir` flag loads the plugin directly without needing marketplace installation. All commands, agents, skills, and hooks are available immediately.
+Flags:
+- `--dangerously-skip-permissions` — bypasses tool permission prompts so agents can run autonomously without manual approval on every file read, shell command, etc.
+- `--plugin-dir` — loads the plugin directly without needing marketplace installation. All commands, agents, skills, and hooks are available immediately.
 
 ## Commands
 
