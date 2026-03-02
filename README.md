@@ -1,5 +1,7 @@
 # buidl — Multi-Agent OPNet Development Plugin for Claude Code
 
+[![Plugin Tests](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml/badge.svg)](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml)
+
 A Claude Code plugin that turns a single prompt into a production-ready, audited OPNet Bitcoin L1 dApp. 7 specialized agents handle contract development, frontend, backend, security audit, deployment, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle.
 
 Built on top of the `/buidl` dev loop (idea → challenge → spec → build → review → ship), extended with OPNet-specific agents, knowledge slices, and 27 real-bug audit patterns from the btc-vision repos.
@@ -176,6 +178,29 @@ buidl/
     ├── audit-from-bugs/
     └── loop-guide/
 ```
+
+## Testing
+
+Run the structural validation suite locally:
+
+```bash
+bash tests/plugin-tests.sh
+```
+
+The test suite validates 117 invariants across 8 categories:
+
+| Category | What it checks |
+|----------|----------------|
+| Shell syntax | `bash -n` on all scripts |
+| Shell correctness | `sedi()` not recursive, no literal `\n` |
+| Agent structure | 5 required sections in all 10 agents |
+| FORBIDDEN blocks | Present in all 6 specialist agents |
+| Knowledge refs | All slice paths in agents resolve to existing files |
+| Issue bus schema | 7 issue types consistent across agents |
+| Version consistency | `plugin.json` matches `CHANGELOG.md` |
+| File existence | All required files present |
+
+Tests run automatically on every push and PR via GitHub Actions.
 
 ## License
 
