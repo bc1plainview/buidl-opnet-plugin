@@ -15,7 +15,7 @@ set -euo pipefail
 # Cross-platform sed -i (macOS requires '' argument, Linux does not)
 sedi() {
   if [[ "$OSTYPE" == darwin* ]]; then
-    sedi "$@"
+    sed -i '' "$@"
   else
     sed -i "$@"
   fi

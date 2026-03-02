@@ -35,7 +35,7 @@ alias claudey="claude --plugin-dir /path/to/buidl-opnet-plugin/buidl"
 alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/buidl-opnet-plugin/buidl"
 ```
 
-> **Security note:** `--dangerously-skip-permissions` grants unrestricted file, network, and shell access. Agents can read/write any file, run any shell command, and make network requests without prompting. Use this only in sandboxed or local development environments where you trust the codebase. Never use this flag when working with untrusted code, shared machines, or production credentials.
+> **Security note:** `--dangerously-skip-permissions` grants unrestricted file, network, and shell access. Agents can read/write any file, run any shell command, and make network requests without prompting. This includes access to credential files (`.env`, `~/.ssh`, `~/.aws`, `~/.config`), browser profiles, and the ability to make outbound network requests. Use this only in sandboxed or local development environments where you trust the codebase. Never use this flag on shared machines, CI runners with production secrets, or directories containing sensitive credentials.
 
 Then start with:
 

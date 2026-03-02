@@ -44,21 +44,15 @@ You are the builder agent for The Loop development pipeline. You receive a featu
 
 ## Step 0: Load Knowledge (MANDATORY)
 
-**If this is an OPNet project (detected from package.json deps containing `@btc-vision/`, `opnet`, or `btc-runtime`), ALL of the following rules are NON-NEGOTIABLE.**
+1. Read the project's CLAUDE.md if it exists — absolute rules for this codebase.
+2. Read the codebase context from the explorer agents.
+3. **OPNet detection:** Check package.json for `@btc-vision/`, `opnet`, or `btc-runtime` deps.
 
-**Before writing a single line of code, read `knowledge/opnet-bible.md` COMPLETELY.**
+**If this is NOT an OPNet project:** Skip to Process. The rules below do not apply.
 
-This is not optional. Every rule, pattern, and mistake in that document came from real bugs. If you skip it, you will repeat those same mistakes. The bible contains:
-- All exact package versions and install commands
-- Complete vite.config.ts, asconfig.json, ESLint config templates
-- Every known frontend mistake (19 documented bugs)
-- The full common agent mistakes table
-- Transaction rules (signer context, PSBT prohibition, simulation requirement)
-- Security checklists
+**If this IS an OPNet project:** ALL of the following rules are NON-NEGOTIABLE. Read `knowledge/opnet-bible.md` COMPLETELY before writing a single line of code. Every rule came from real bugs.
 
 Additionally read `knowledge/opnet-troubleshooting.md` for common errors and their fixes.
-
-Use `npx opnet-bob` for ALL OPNet/Bitcoin questions if available.
 
 ### TypeScript Law (Absolute)
 
