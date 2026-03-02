@@ -21,23 +21,32 @@ git clone https://github.com/bc1plainview/buidl-opnet-plugin.git
 claude --plugin-dir /path/to/buidl-opnet-plugin/buidl
 ```
 
-### Recommended: Shell Alias
+### Shell Aliases
 
-Add to your `~/.zshrc` or `~/.bashrc`:
+**Safe mode** (interactive approval on tool use — recommended for first-time use):
+
+```bash
+alias claudey="claude --plugin-dir /path/to/buidl-opnet-plugin/buidl"
+```
+
+**Autonomous mode** (skips permission prompts — for trusted local development):
 
 ```bash
 alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/buidl-opnet-plugin/buidl"
 ```
 
+> **Security note:** `--dangerously-skip-permissions` grants unrestricted file, network, and shell access. Agents can read/write any file, run any shell command, and make network requests without prompting. Use this only in sandboxed or local development environments where you trust the codebase. Never use this flag when working with untrusted code, shared machines, or production credentials.
+
 Then start with:
 
 ```bash
-claudeyproj
+claudey        # safe mode: approves each tool use
+claudeyproj    # autonomous mode: agents run without prompts
 ```
 
 Flags:
-- `--dangerously-skip-permissions` — bypasses tool permission prompts so agents can run autonomously without manual approval on every file read, shell command, etc.
 - `--plugin-dir` — loads the plugin directly without needing marketplace installation. All commands, agents, skills, and hooks are available immediately.
+- `--dangerously-skip-permissions` — bypasses all tool permission prompts. Required for autonomous multi-agent loops where 10+ agents dispatch shell commands, file reads, and writes without human intervention. See security note above.
 
 ## Commands
 

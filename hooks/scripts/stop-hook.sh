@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# Cross-platform sed -i (macOS requires '' argument, Linux does not)
+sedi() {
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sedi "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
 # Read hook input from stdin
 INPUT=$(cat)
 
@@ -59,16 +68,16 @@ fi
 
 # If reviewer passed, we're done
 if [[ "$VERDICT" == "PASS" ]]; then
-  sed -i '' "s/^status:.*/status: done/" "$STATE_FILE"
-  sed -i '' "s/^current_phase:.*/current_phase: done/" "$STATE_FILE"
+  sedi "s/^status:.*/status: done/" "$STATE_FILE"
+  sedi "s/^current_phase:.*/current_phase: done/" "$STATE_FILE"
   echo '{"decision": "approve", "reason": "Loop complete. Reviewer passed the PR."}' >&2
   exit 0
 fi
 
 # If max cycles reached, stop
 if [[ "$CYCLE" -ge "$MAX_CYCLES" ]]; then
-  sed -i '' "s/^status:.*/status: failed/" "$STATE_FILE"
-  sed -i '' "s/^current_phase:.*/current_phase: failed/" "$STATE_FILE"
+  sedi "s/^status:.*/status: failed/" "$STATE_FILE"
+  sedi "s/^current_phase:.*/current_phase: failed/" "$STATE_FILE"
   cat >&2 << STOP_MSG
 {"decision": "approve", "reason": "Loop reached max cycles ($MAX_CYCLES). Remaining findings are in $LATEST_REVIEW. The PR is open for manual review and fixing."}
 STOP_MSG
@@ -84,10 +93,10 @@ fi
 
 # FAIL verdict or still in build phase — continue the loop
 NEW_CYCLE=$((CYCLE + 1))
-sed -i '' "s/^cycle:.*/cycle: $NEW_CYCLE/" "$STATE_FILE"
-sed -i '' "s/^inner_retries:.*/inner_retries: 0/" "$STATE_FILE"
-sed -i '' "s/^status:.*/status: building/" "$STATE_FILE"
-sed -i '' "s/^current_phase:.*/current_phase: build/" "$STATE_FILE"
+sedi "s/^cycle:.*/cycle: $NEW_CYCLE/" "$STATE_FILE"
+sedi "s/^inner_retries:.*/inner_retries: 0/" "$STATE_FILE"
+sedi "s/^status:.*/status: building/" "$STATE_FILE"
+sedi "s/^current_phase:.*/current_phase: build/" "$STATE_FILE"
 
 # Build the re-injection prompt
 FINDINGS=""
