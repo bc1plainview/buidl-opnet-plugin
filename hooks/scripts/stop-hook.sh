@@ -4,6 +4,8 @@
 # Called by Claude Code's Stop hook. Checks if the build-review loop
 # should continue or if the session can exit.
 #
+# Handles both legacy single-builder flow and multi-agent OPNet flow.
+#
 # Exit codes:
 #   0 — Allow exit (loop done, passed, cancelled, or no loop running)
 #   2 — Block exit (loop still running, re-inject prompt)
@@ -29,10 +31,12 @@ SESSION_NAME=$(grep '^session_name:' "$STATE_FILE" | head -1 | awk '{print $2}')
 CYCLE=$(grep '^cycle:' "$STATE_FILE" | head -1 | awk '{print $2}')
 MAX_CYCLES=$(grep '^max_cycles:' "$STATE_FILE" | head -1 | awk '{print $2}')
 PHASE=$(grep '^current_phase:' "$STATE_FILE" | head -1 | awk '{print $2}')
+PROJECT_TYPE=$(grep '^project_type:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo "generic")
+CURRENT_STEP=$(grep '^current_step:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo "0")
 
-# Only block exit during active build-review phases
+# Only block exit during active loop phases
 case "$STATUS" in
-  building|reviewing)
+  building|reviewing|auditing|deploying|testing)
     ;;
   *)
     # Not in an active loop phase — allow exit
@@ -71,6 +75,13 @@ STOP_MSG
   exit 0
 fi
 
+# Check for audit FAIL that needs re-routing (OPNet multi-agent flow)
+AUDIT_FINDINGS="$SESSION_DIR/artifacts/audit/findings.md"
+AUDIT_VERDICT=""
+if [[ -f "$AUDIT_FINDINGS" ]]; then
+  AUDIT_VERDICT=$(grep '^VERDICT:' "$AUDIT_FINDINGS" | head -1 | awk '{print $2}')
+fi
+
 # FAIL verdict or still in build phase — continue the loop
 NEW_CYCLE=$((CYCLE + 1))
 sed -i '' "s/^cycle:.*/cycle: $NEW_CYCLE/" "$STATE_FILE"
@@ -86,8 +97,37 @@ fi
 
 WORKTREE_PATH=$(grep '^worktree_path:' "$STATE_FILE" | head -1 | sed 's/^worktree_path: //')
 
-# Construct the continuation prompt
-PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES.
+# Construct the continuation prompt based on project type
+if [[ "$PROJECT_TYPE" == "opnet" ]]; then
+  # OPNet multi-agent continuation
+  PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES (OPNet Multi-Agent).
+
+The reviewer found issues in the previous cycle. Route each finding to the responsible specialist agent:
+- Contract issues → opnet-contract-dev
+- Frontend issues → opnet-frontend-dev
+- Backend issues → opnet-backend-dev
+- Integration issues → fix in the appropriate layer
+
+After all fixes, re-run the audit (opnet-auditor), then re-run the full verify pipeline.
+
+Work in the worktree at: $WORKTREE_PATH
+
+REVIEWER FINDINGS:
+$FINDINGS
+
+Spec documents are at: $SESSION_DIR/spec/
+Codebase context is at: $SESSION_DIR/context.md
+Artifacts are at: $SESSION_DIR/artifacts/
+
+Steps:
+1. Parse findings and identify responsible agent for each
+2. Spawn responsible agent(s) with their findings
+3. Re-run opnet-auditor after fixes
+4. If audit PASS: commit, push, update PR
+5. Launch loop-reviewer for next review cycle"
+else
+  # Legacy single-builder continuation
+  PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES.
 
 The reviewer found issues in the previous cycle. Address each finding below, then re-run the full verify pipeline (lint, typecheck, build, test). When everything passes, commit, push, and update the PR.
 
@@ -100,6 +140,7 @@ Spec documents are at: $SESSION_DIR/spec/
 Codebase context is at: $SESSION_DIR/context.md
 
 After fixing and verifying, launch the loop-reviewer agent to review the updated PR."
+fi
 
 # Use python to JSON-encode the prompt safely
 JSON_PROMPT=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" <<< "$PROMPT")

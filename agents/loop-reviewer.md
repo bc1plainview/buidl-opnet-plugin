@@ -118,6 +118,47 @@ If the project uses any `@btc-vision/*` or `opnet` packages, check ALL of the fo
 - Dark backgrounds with atmosphere
 - No AI slop typography
 
+### 7. Cross-Layer Integration (MANDATORY for multi-component OPNet projects)
+
+When the project has both contract and frontend/backend layers, check ALL of the following:
+
+**ABI Consistency:**
+- [ ] Every `getContract()` method call in the frontend has a corresponding `@method()` in the contract
+- [ ] Parameter types in frontend calls match the contract's `@method({ name, type })` declarations
+- [ ] `encodeSelector()` uses the FULL method signature with param types (not just method name)
+
+**Address Format Consistency:**
+- [ ] Frontend uses `Address.fromString(hashedMLDSAKey, tweakedPubKey)` — two params, not one
+- [ ] No `bc1p...` string passed directly where a contract Address is expected
+- [ ] Same contract address used in frontend config and deployment receipt
+
+**Network Configuration:**
+- [ ] All layers use the same `networks.*` value (e.g., all use `networks.opnetTestnet`)
+- [ ] RPC URL consistent across all layers
+- [ ] Explorer links use matching network params (`op_testnet` vs `op_mainnet`)
+
+**Signer Rules:**
+- [ ] Frontend: `signer: null`, `mldsaSigner: null` in ALL `sendTransaction()` calls
+- [ ] Backend: `signer: wallet.keypair`, `mldsaSigner: wallet.mldsaKeypair` in ALL `sendTransaction()` calls
+
+**Deployment Verification:**
+- [ ] Contract address in frontend config matches the deployed address from receipt.json
+- [ ] Deployment receipt shows `status: success`
+- [ ] Explorer links are present and correctly formatted
+
+**UI Test Coverage:**
+- [ ] Smoke tests exist and pass for all routes
+- [ ] E2E tests exist for core user flows (connect wallet, view balance, send transaction)
+- [ ] Design compliance tests pass (no emojis, dark background, no spinners)
+- [ ] Screenshots captured for key states
+
+**Audit Resolution:**
+- [ ] All CRITICAL audit findings have been addressed
+- [ ] All HIGH audit findings have been addressed
+- [ ] Fixes don't introduce new issues (verify fix correctness)
+
+**Any cross-layer inconsistency = MAJOR finding at minimum.**
+
 ## Output Format
 
 You MUST produce output in this exact format:
