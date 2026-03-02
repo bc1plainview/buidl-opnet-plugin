@@ -61,7 +61,7 @@ The orchestrator dispatches work to specialized agents based on what the project
 | `opnet-frontend-dev` | React + Vite frontends with WalletConnect v2 | sonnet |
 | `opnet-backend-dev` | hyper-express backend services | sonnet |
 | `opnet-auditor` | READ-ONLY security audit (27 real-bug patterns + full checklist) | sonnet |
-| `opnet-deployer` | TransactionFactory deployment to testnet/mainnet | haiku |
+| `opnet-deployer` | TransactionFactory deployment to testnet/mainnet | sonnet |
 | `opnet-ui-tester` | Puppeteer smoke tests + E2E + screenshot capture | sonnet |
 | `loop-reviewer` | PR review against spec + 27-pattern checklist | inherit |
 
