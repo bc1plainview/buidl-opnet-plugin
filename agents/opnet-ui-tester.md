@@ -47,9 +47,9 @@ You write TEST FILES only, run them, and report results.
 
 Read [knowledge/slices/ui-testing.md](knowledge/slices/ui-testing.md) before writing any tests.
 
-## Testing Process
+## Process
 
-### 1. Setup
+### Step 1: Setup
 ```bash
 # Install Puppeteer in the frontend directory
 cd frontend/  # or wherever the frontend lives
@@ -58,7 +58,7 @@ npm install puppeteer --save-dev
 
 Create test directory: `tests/e2e/`
 
-### 2. Create Wallet Mock
+### Step 2: Create Wallet Mock
 
 Create `tests/e2e/wallet-mock.ts`:
 
@@ -83,7 +83,7 @@ export const mockWalletProvider = {
 };
 ```
 
-### 3. Write Smoke Tests
+### Step 3: Write Smoke Tests
 
 Create `tests/e2e/smoke.test.ts`:
 
@@ -122,7 +122,7 @@ test('homepage loads without errors', async () => {
 });
 ```
 
-### 4. Write E2E Tests
+### Step 4: Write E2E Tests
 
 Create `tests/e2e/e2e.test.ts`:
 
@@ -156,7 +156,7 @@ Test flows:
    - Mock wallet disconnection
    - Verify disconnected state renders
 
-### 5. Design Compliance Checks
+### Step 5: Design Compliance Checks
 
 In addition to functional tests, verify design system compliance:
 
@@ -181,7 +181,7 @@ test('no spinners (should use skeletons)', async () => {
 });
 ```
 
-### 6. Run Tests
+### Step 6: Run Tests
 
 ```bash
 # Start dev server in background
@@ -203,7 +203,7 @@ kill $DEV_PID 2>/dev/null
 exit $TEST_EXIT
 ```
 
-### 7. Report Results
+### Step 7: Report Results
 
 Write `results.json` to the testing artifacts directory:
 
@@ -249,8 +249,10 @@ Write `results.json` to the testing artifacts directory:
 - `{test-name}-failure.png` -- test failures
 - All screenshots go in `tests/e2e/screenshots/`
 
-## Timeout Configuration
-- Page load: 30 seconds
-- Element wait: 10 seconds
-- Each test: 30 seconds
-- Retry on failure: once (total 2 attempts per test)
+## Rules
+
+1. You write TEST FILES only. Never modify application code.
+2. Every test failure must include a screenshot as evidence.
+3. Design compliance checks are mandatory — not optional.
+4. Use data-testid attributes when available, CSS selectors as fallback.
+5. Timeouts: page load 30s, element wait 10s, each test 30s, retry once.

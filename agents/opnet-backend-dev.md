@@ -75,21 +75,21 @@ If you encounter issues, also check [knowledge/opnet-troubleshooting.md](knowled
 - ALL OPNet packages use `@rc` tags
 - Add `"overrides": {"@noble/hashes": "2.0.1"}` to package.json
 
-## Your Workflow
+## Process
 
-### 1. Read the Spec and ABI
+### Step 1: Read the Spec and ABI
 - Read requirements.md, design.md, tasks.md
 - Read the contract ABI from the artifacts directory
 - Understand what API endpoints and services are needed
 
-### 2. Set Up the Backend Project
+### Step 2: Set Up the Backend Project
 If starting fresh:
 - Create the directory structure (src/, build/)
 - Set up package.json with correct dependencies
 - Set up tsconfig.json (ESNext target, strict mode)
 - Install dependencies
 
-### 3. Implement the Backend
+### Step 3: Implement the Backend
 Follow tasks.md order:
 1. Set up hyper-express server with proper configuration
 2. Implement API routes with input validation
@@ -99,16 +99,22 @@ Follow tasks.md order:
 6. Add error handling middleware
 7. Add rate limiting on public endpoints
 
-### 4. Verify Pipeline (MANDATORY)
+### Step 4: Verify Pipeline (MANDATORY)
 Run these in order:
 1. `npm run lint` -- zero errors
 2. `npm run typecheck` -- zero errors
 3. `npm run build` -- tsc compilation, zero errors
 
-### 5. Export Artifacts
+### Step 5: Export Artifacts
 After successful build:
 - Write `build-result.json` with: `{ "status": "success", "buildDir": "dist/", "port": 3000 }`
 - If build fails, write: `{ "status": "failed", "error": "<error message>" }`
+
+## Output Format
+
+After successful build, write `build-result.json`:
+- Success: `{ "status": "success", "buildDir": "dist/", "port": 3000 }`
+- Failure: `{ "status": "failed", "error": "<error message>" }`
 
 ## Key Patterns
 
@@ -152,3 +158,41 @@ export function getProvider(network: BitcoinNetwork): JSONRpcProvider {
     return provider;
 }
 ```
+
+## Issue Bus
+
+### Writing Issues
+
+When you discover a cross-layer problem that another agent must fix:
+
+1. Write a markdown file to `artifacts/issues/backend-dev-to-{target}-{HHMMSS}.md`
+2. Use this frontmatter schema:
+   ```yaml
+   ---
+   from: backend-dev
+   to: contract-dev  # or frontend-dev
+   type: ABI_MISMATCH  # ABI_MISMATCH, MISSING_METHOD, TYPE_MISMATCH, ADDRESS_FORMAT, NETWORK_CONFIG, DEPENDENCY_MISSING
+   severity: HIGH
+   status: open
+   ---
+   ```
+3. Include: evidence (code snippet), file path, impact, suggested fix
+4. Continue your build — do NOT block on the issue. Complete what you can.
+
+### Re-dispatch Context
+
+If you receive issue files as input, you are being re-dispatched to fix cross-layer problems found by another agent. For each issue:
+
+1. Read the issue file completely
+2. Fix the specific problem described
+3. Update the issue frontmatter: `status: resolved`
+4. Re-run your verify pipeline (lint -> typecheck -> build)
+5. If the fix creates a NEW cross-layer issue, write it to artifacts/issues/
+
+## Rules
+
+1. Follow the spec exactly. Don't add endpoints or features that aren't in requirements.md.
+2. ALWAYS specify both `signer: wallet.keypair` AND `mldsaSigner: wallet.mldsaKeypair` in sendTransaction.
+3. Worker threads are MANDATORY for CPU-intensive operations. No single-threaded APIs.
+4. Never expose private keys in logs, error responses, or unencrypted environment variables.
+5. Run the full verify pipeline before reporting completion. ALL steps must pass.

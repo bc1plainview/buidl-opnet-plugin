@@ -97,9 +97,32 @@ fi
 
 WORKTREE_PATH=$(grep '^worktree_path:' "$STATE_FILE" | head -1 | sed 's/^worktree_path: //')
 
+# Check for open issues from previous cycle
+OPEN_ISSUES=""
+ISSUES_DIR="$SESSION_DIR/artifacts/issues"
+if [[ -d "$ISSUES_DIR" ]]; then
+  for issue_file in "$ISSUES_DIR"/*.md; do
+    [[ -f "$issue_file" ]] || continue
+    if grep -q "status: open" "$issue_file" 2>/dev/null; then
+      OPEN_ISSUES="${OPEN_ISSUES}\n--- $(basename "$issue_file") ---\n$(cat "$issue_file")\n"
+    fi
+  done
+fi
+
 # Construct the continuation prompt based on project type
 if [[ "$PROJECT_TYPE" == "opnet" ]]; then
   # OPNet multi-agent continuation
+  ISSUE_SECTION=""
+  if [[ -n "$OPEN_ISSUES" ]]; then
+    ISSUE_SECTION="
+OPEN CROSS-LAYER ISSUES (from artifacts/issues/):
+$OPEN_ISSUES
+
+Route each open issue to the responsible agent (check the 'to' field in each issue).
+Re-dispatch limit: 2 cycles per agent pair. If limit reached, defer to auditor.
+"
+  fi
+
   PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES (OPNet Multi-Agent).
 
 The reviewer found issues in the previous cycle. Route each finding to the responsible specialist agent:
@@ -107,7 +130,7 @@ The reviewer found issues in the previous cycle. Route each finding to the respo
 - Frontend issues → opnet-frontend-dev
 - Backend issues → opnet-backend-dev
 - Integration issues → fix in the appropriate layer
-
+${ISSUE_SECTION}
 After all fixes, re-run the audit (opnet-auditor), then re-run the full verify pipeline.
 
 Work in the worktree at: $WORKTREE_PATH
@@ -121,10 +144,11 @@ Artifacts are at: $SESSION_DIR/artifacts/
 
 Steps:
 1. Parse findings and identify responsible agent for each
-2. Spawn responsible agent(s) with their findings
-3. Re-run opnet-auditor after fixes
-4. If audit PASS: commit, push, update PR
-5. Launch loop-reviewer for next review cycle"
+2. Check artifacts/issues/ for open cross-layer issues and route them
+3. Spawn responsible agent(s) with their findings
+4. Re-run opnet-auditor after fixes
+5. If audit PASS: commit, push, update PR
+6. Launch loop-reviewer for next review cycle"
 else
   # Legacy single-builder continuation
   PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES.

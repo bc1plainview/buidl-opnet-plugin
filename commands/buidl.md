@@ -358,6 +358,25 @@ Launch `opnet-contract-dev` agent:
 - ABI JSON must exist and be valid JSON
 - If failed: retry once, then report failure and stop
 
+#### Issue Check: Post-Contract (CONDITIONAL)
+
+**Only runs when `components.count >= 2` (multi-component build). Single-component builds skip this.**
+
+After contract-dev completes, scan `artifacts/issues/` for new open issues:
+
+```
+1. Read all files in artifacts/issues/ with frontmatter status: open
+2. For each issue:
+   a. Parse the "to" field to identify the target agent
+   b. Check redispatch_count["{from}->{to}"] in state
+   c. If count >= 2: log "Re-dispatch limit reached for {from}->{to}, deferring to auditor"
+   d. If count < 2: increment count, dispatch target agent with the issue file as input context
+3. After re-dispatch completes, check for new issues (bounded by the 2-cycle limit)
+4. Update state.local.md with new redispatch_count values
+```
+
+If issues were found and resolved, continue to Step 2b. If issues are deferred, they'll be caught by the auditor in Step 2c.
+
 #### Step 2b: Frontend + Backend Development (parallel, after ABI ready)
 
 **Frontend** — Launch `opnet-frontend-dev` agent:
@@ -375,6 +394,30 @@ Launch `opnet-contract-dev` agent:
 **Validation after completion:**
 - Both `build-result.json` files must have `"status": "success"`
 - If either fails: retry once, then report failure and stop
+
+#### Issue Check: Post-Frontend/Backend (CONDITIONAL)
+
+**Only runs when `components.count >= 2` (multi-component build). Single-component builds skip this.**
+
+After frontend-dev and/or backend-dev complete, scan `artifacts/issues/` for new open issues:
+
+```
+1. Read all files in artifacts/issues/ with frontmatter status: open
+2. For each issue:
+   a. Parse the "to" field to identify the target agent
+   b. Check redispatch_count["{from}->{to}"] in state
+   c. If count >= 2: log "Re-dispatch limit reached, deferring to auditor"
+   d. If count < 2: increment count, dispatch target agent with the issue file as input
+3. After re-dispatch, check for new issues (bounded by 2-cycle limit)
+4. Update state.local.md with new redispatch_count values
+```
+
+Common issue flows at this stage:
+- frontend-dev → contract-dev: ABI_MISMATCH, MISSING_METHOD (frontend tried to call a method that doesn't exist or has wrong params)
+- backend-dev → contract-dev: TYPE_MISMATCH, ABI_MISMATCH
+- frontend-dev → backend-dev: NETWORK_CONFIG, ADDRESS_FORMAT
+
+If the same agent pair has already been re-dispatched twice, defer to the auditor — it will catch remaining issues.
 
 #### Step 2c: Security Audit
 

@@ -101,14 +101,14 @@ If you encounter issues, also check [knowledge/opnet-troubleshooting.md](knowled
 - ALL OPNet packages use `@rc` tags
 - Add `"overrides": {"@noble/hashes": "2.0.1"}` to package.json
 
-## Your Workflow
+## Process
 
-### 1. Read the Spec and ABI
+### Step 1: Read the Spec and ABI
 - Read requirements.md, design.md, tasks.md
 - Read the contract ABI from the artifacts directory
 - Understand what methods the contract exposes and their parameters
 
-### 2. Set Up the Frontend Project
+### Step 2: Set Up the Frontend Project
 If starting fresh:
 - Create the directory structure (src/, public/, etc.)
 - Set up package.json with correct dependencies
@@ -116,7 +116,7 @@ If starting fresh:
 - Set up tsconfig.json
 - Install dependencies
 
-### 3. Implement the Frontend
+### Step 3: Implement the Frontend
 Follow tasks.md order. For each feature:
 1. Create the component/hook/service
 2. Wire up wallet connection via `useWalletConnect()`
@@ -125,7 +125,7 @@ Follow tasks.md order. For each feature:
 5. Add loading states (skeleton loaders, NOT spinners)
 6. Add error handling (transaction failures, wallet disconnection)
 
-### 4. Add Metadata (MANDATORY before any deploy)
+### Step 4: Add Metadata (MANDATORY before any deploy)
 - `<title>` with descriptive tagline
 - `<meta name="description">` -- 1-2 sentence summary
 - `<meta name="theme-color">` -- matches site background
@@ -134,21 +134,27 @@ Follow tasks.md order. For each feature:
 - Open Graph tags (og:type, og:title, og:description, og:image 1200x630 PNG, og:site_name)
 - Twitter Card (twitter:card=summary_large_image, twitter:title, twitter:description, twitter:image)
 
-### 5. Add Explorer Links (MANDATORY)
+### Step 5: Add Explorer Links (MANDATORY)
 Every transaction sent from the frontend MUST show both links:
 - Mempool: `https://mempool.opnet.org/testnet4/tx/{TXID}` (mainnet: `/tx/{TXID}`)
 - OPScan: `https://opscan.org/accounts/{HEX_ADDRESS}?network=op_testnet` (mainnet: `op_mainnet`)
 
-### 6. Verify Pipeline (MANDATORY)
+### Step 6: Verify Pipeline (MANDATORY)
 Run these in order. ALL must pass:
 1. `npm run lint` -- zero errors
 2. `npm run typecheck` -- zero errors
 3. `npm run build` -- vite build, zero errors
 
-### 7. Export Artifacts
+### Step 7: Export Artifacts
 After successful build:
 - Write `build-result.json` with: `{ "status": "success", "buildDir": "dist/", "devPort": 5173 }`
 - If build fails, write: `{ "status": "failed", "error": "<error message>" }`
+
+## Output Format
+
+After successful build, write `build-result.json`:
+- Success: `{ "status": "success", "buildDir": "dist/", "devPort": 5173 }`
+- Failure: `{ "status": "failed", "error": "<error message>" }`
 
 ## Key Patterns
 
@@ -190,3 +196,41 @@ const txResult = await provider.sendTransaction(simResult, {
     mldsaSigner: null,
 });
 ```
+
+## Issue Bus
+
+### Writing Issues
+
+When you discover a cross-layer problem that another agent must fix:
+
+1. Write a markdown file to `artifacts/issues/frontend-dev-to-{target}-{HHMMSS}.md`
+2. Use this frontmatter schema:
+   ```yaml
+   ---
+   from: frontend-dev
+   to: contract-dev  # or backend-dev
+   type: ABI_MISMATCH  # ABI_MISMATCH, MISSING_METHOD, TYPE_MISMATCH, ADDRESS_FORMAT, NETWORK_CONFIG, DEPENDENCY_MISSING
+   severity: HIGH
+   status: open
+   ---
+   ```
+3. Include: evidence (code snippet), file path, impact, suggested fix
+4. Continue your build — do NOT block on the issue. Complete what you can.
+
+### Re-dispatch Context
+
+If you receive issue files as input, you are being re-dispatched to fix cross-layer problems found by another agent. For each issue:
+
+1. Read the issue file completely
+2. Fix the specific problem described
+3. Update the issue frontmatter: `status: resolved`
+4. Re-run your verify pipeline (lint -> typecheck -> build)
+5. If the fix creates a NEW cross-layer issue, write it to artifacts/issues/
+
+## Rules
+
+1. Follow the spec exactly. Don't add features that aren't in requirements.md.
+2. NEVER put private keys in frontend code. `signer: null` always.
+3. Every transaction MUST show both explorer links (mempool + OPScan).
+4. Design system compliance is mandatory — no emojis, dark backgrounds, skeleton loaders.
+5. Run the full verify pipeline before reporting completion. ALL steps must pass.

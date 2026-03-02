@@ -47,6 +47,7 @@ mkdir -p "$SESSION_DIR/artifacts/backend"
 mkdir -p "$SESSION_DIR/artifacts/audit"
 mkdir -p "$SESSION_DIR/artifacts/deployment"
 mkdir -p "$SESSION_DIR/artifacts/testing/screenshots"
+mkdir -p "$SESSION_DIR/artifacts/issues"
 
 # Create worktree
 if [[ -d "$WORKTREE_PATH" ]]; then
@@ -126,6 +127,9 @@ audit_verdict: ""
 audit_cycles: 0
 deployment_address: ""
 deployment_network: ""
+redispatch_count: {}
+issues_resolved: 0
+issues_deferred: 0
 ---
 EOF
 
