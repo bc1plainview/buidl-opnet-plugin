@@ -3,6 +3,9 @@
 ## [2.1.0] - 2026-03-03
 
 ### Added
+- Structural test suite: `tests/plugin-tests.sh` with 117 invariant checks across 8 categories
+- GitHub Actions CI/CD: `.github/workflows/plugin-tests.yml` runs on every push and PR
+- CI badge and Testing section in README
 - Inter-agent issue bus: typed markdown messages in `artifacts/issues/` with YAML frontmatter routing
 - Orchestrator mid-cycle re-dispatch with 2-cycle limit per agent pair
 - FORBIDDEN rules in deployer and UI-tester agents (now 6/6 specialist agents)
@@ -22,8 +25,13 @@
 
 ### Fixed
 - `sed -i ''` BSD-only syntax replaced with cross-platform function
+- `sedi()` infinite recursion bug on macOS (called itself instead of `sed`)
 - Literal `\n` in stop-hook.sh replaced with `$'\n'` ANSI-C quoting
 - Orphan bullet points in backend-dev and frontend-dev agent constraints
+- False-positive OPNet classification for non-OPNet React/Vite projects in setup-loop.sh
+- stop-hook.sh crash on malformed state file (grep without fallback under `set -eo pipefail`)
+- Auditor Issue Bus section gave impossible write instructions (agent is READ-ONLY)
+- plugin.json version mismatch with CHANGELOG (was `2.0.0-opnet`, now `2.1.0`)
 
 ## [2.0.0] - 2026-03-02
 
