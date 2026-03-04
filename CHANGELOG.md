@@ -1,5 +1,62 @@
 # Changelog
 
+## [3.1.0] - 2026-03-04
+
+### Added
+- **Bash tool guard**: `hooks/scripts/guard-state-bash.sh` -- closes the bypass where `echo > state.yaml` via Bash tool could circumvent Write/Edit guards. Exempts write-state.sh itself.
+- **Nested YAML support**: `write-state.sh --nested key.path=value` uses Python for safe nested key updates (e.g., `agent_status.contract-dev=done`).
+- **Auto-detect existing session**: `/buidl` now checks for active sessions before setup and offers resume/cancel/clean options.
+- **Learning pruning**: `setup-loop.sh` caps learning store at 20 most recent retrospectives, auto-pruning old ones.
+- **Orphan worktree detection**: `/buidl-status` flags worktrees with no active state. `/buidl-clean` offers to remove them.
+- **Transaction simulation knowledge slice**: `knowledge/slices/transaction-simulation.md` -- covers getContract simulation, deployment simulation, regtest local dev loop, gas estimation, and frontend simulation patterns.
+- **Playwright E2E testing**: Replaced Puppeteer with Playwright across UI tester agent and ui-testing knowledge slice. Added visual regression testing, fixtures with wallet mock injection, `playwright.config.ts` setup, and dogfooding guidance.
+- **Integration tests**: 10 real integration tests for write-state.sh (full write, partial update, nested mode, error cases, atomicity).
+
+### Changed
+- `opnet-ui-tester.md`: Fully rewritten for Playwright. FORBIDDEN section now explicitly bans Puppeteer.
+- `ui-testing.md`: Rewritten with Playwright patterns, visual regression, reduced-motion emulation, dogfooding section.
+- `opnet-deployer.md`: Added Write/Edit tools, Step 2 simulation, references transaction-simulation.md.
+- `opnet-frontend-dev.md`: References transaction-simulation.md for frontend simulation patterns.
+- `opnet-auditor.md`: Fixed Rule 8 contradiction (read-only agent can't save files).
+- Test suite expanded from 166 to 203 tests across 23 categories.
+
+### Fixed
+- Guard bypass via Bash tool (redirect operators targeting state files).
+- `opnet-frontend-dev.md`: Replaced `contractCache.get(key)!` with proper null check (TypeScript Law violation).
+- `loop-guide/SKILL.md`: Updated with all v3 features (was stale after v3.0.0 release).
+
+## [3.0.0] - 2026-03-04
+
+### Added
+- **Atomic state management**: `scripts/write-state.sh` — all state mutations go through a single script that writes to a temp file then atomically renames. No more raw `sed -i` on state files.
+- **State guard hook**: `hooks/scripts/guard-state.sh` — PreToolUse hook blocks direct Write/Edit to state files during active loops, enforcing the write-state.sh pattern.
+- **Wall-clock timeout**: Stop hook checks elapsed time against `max_duration` (default 60 min). Timed-out sessions can be resumed.
+- **Checkpointing**: After every phase transition, writes `checkpoint.md` with phases completed, agents finished, key decisions, and next action.
+- **Resume command**: `/buidl-resume` reads state + checkpoint to continue interrupted sessions from their last phase.
+- **Cost tracking**: `cost-ledger.md` append-only log of token spend per agent dispatch. `--max-tokens N` flag for budget enforcement.
+- **Learning system**: `learning/` directory stores retrospectives from completed sessions. Phase 4 Step 0 consults past retrospectives for matching project types.
+- **Phase 6 (Wrap-up)**: Auto-generates retrospective after loop completion (pass or fail), saved to both session dir and learning store.
+- **Dynamic agent generation**: Generic (non-OPNet) projects can now generate domain-specific agents from `templates/domain-agent.md` instead of falling back to a single loop-builder.
+- **Knowledge slice template**: `templates/knowledge-slice.md` for generating project-specific knowledge for dynamic agents.
+- **max_turns per agent type**: Builders=30, Reviewers=15, Explorers=15, Researchers=10, Auditors=20, Deployers=15, UI Testers=20.
+- **Structured error handling**: Agent failures get one retry, then 4 numbered options (retry differently, skip, amend spec, cancel). No more open-ended questions.
+- **Context pressure detection**: Orchestrator checkpoints and suggests `/buidl-resume` when context pressure is detected.
+- **PreToolUse hook config** in hooks.json for Write|Edit tool matching.
+
+### Changed
+- **State file format**: Migrated from `state.local.md` (YAML frontmatter) to `state.yaml` (pure YAML). All commands support dual-file fallback for in-flight sessions.
+- **setup-loop.sh**: Uses write-state.sh for atomic initial write. Creates `agents/` and `knowledge/` dirs in session directory. Adds `max_duration`, `tokens_used`, `phases_completed` fields.
+- **stop-hook.sh**: Completely rewritten — removed `sedi()` function, all state writes go through write-state.sh. Added wall-clock timeout check with cross-platform epoch conversion.
+- **buidl-status.md**: Reads state.yaml (fallback state.local.md), shows tokens_used, elapsed time, checkpoint info.
+- **buidl-cancel.md**: Uses write-state.sh for status update, mentions /buidl-resume.
+- **buidl-clean.md**: Cleans both state.yaml and state.local.md if they exist.
+- **buidl.md**: Added RULES section, checkpoint protocol, cost tracking protocol, learning consultation, max_turns table, structured error handling, upgraded generic mode with dynamic agents.
+
+### Removed
+- `sedi()` function from stop-hook.sh (replaced by write-state.sh)
+- Direct `sed -i` state mutations (all go through write-state.sh now)
+- Raw frontmatter delimiters (`---`) in state files
+
 ## [2.1.0] - 2026-03-03
 
 ### Added

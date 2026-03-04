@@ -5,6 +5,7 @@
 # should continue or if the session can exit.
 #
 # Handles both legacy single-builder flow and multi-agent OPNet flow.
+# Uses write-state.sh for all state mutations (no direct sed on state files).
 #
 # Exit codes:
 #   0 — Allow exit (loop done, passed, cancelled, or no loop running)
@@ -12,14 +13,9 @@
 
 set -euo pipefail
 
-# Cross-platform sed -i (macOS requires '' argument, Linux does not)
-sedi() {
-  if [[ "$OSTYPE" == darwin* ]]; then
-    sed -i '' "$@"
-  else
-    sed -i "$@"
-  fi
-}
+# Locate write-state.sh relative to this script
+SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+WRITE_STATE="$SCRIPT_DIR/scripts/write-state.sh"
 
 # Read hook input from stdin
 INPUT=$(cat)
@@ -29,10 +25,19 @@ if [[ -z "$PROJECT_DIR" ]]; then
   exit 0
 fi
 
-STATE_FILE="$PROJECT_DIR/.claude/loop/state.local.md"
+# Find state file: prefer state.yaml, fall back to state.local.md
+STATE_FILE=""
+if [[ -f "$PROJECT_DIR/.claude/loop/state.yaml" ]]; then
+  STATE_FILE="$PROJECT_DIR/.claude/loop/state.yaml"
+elif [[ -f "$PROJECT_DIR/.claude/loop/state.local.md" ]]; then
+  STATE_FILE="$PROJECT_DIR/.claude/loop/state.local.md"
+fi
 
 # No state file = no loop running
-[[ ! -f "$STATE_FILE" ]] && exit 0
+[[ -z "$STATE_FILE" ]] && exit 0
+
+# Export for write-state.sh
+export STATE_FILE
 
 # Parse state (allow graceful fallback if any field is missing)
 STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
@@ -49,13 +54,37 @@ fi
 
 # Only block exit during active loop phases
 case "$STATUS" in
-  building|reviewing|auditing|deploying|testing)
+  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing)
     ;;
   *)
     # Not in an active loop phase — allow exit
     exit 0
     ;;
 esac
+
+# ── Wall-clock timeout check ──
+STARTED_AT=$(grep '^started_at:' "$STATE_FILE" | head -1 | sed 's/^started_at: //' || true)
+MAX_DURATION=$(grep '^max_duration:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+MAX_DURATION="${MAX_DURATION:-60}"
+
+if [[ -n "$STARTED_AT" ]]; then
+  # Cross-platform epoch conversion
+  if [[ "$OSTYPE" == darwin* ]]; then
+    START_EPOCH=$(date -jf '%Y-%m-%dT%H:%M:%SZ' "$STARTED_AT" '+%s' 2>/dev/null || echo "0")
+  else
+    START_EPOCH=$(date -d "$STARTED_AT" '+%s' 2>/dev/null || echo "0")
+  fi
+  NOW_EPOCH=$(date '+%s')
+
+  if [[ "$START_EPOCH" -gt 0 ]]; then
+    ELAPSED_MIN=$(( (NOW_EPOCH - START_EPOCH) / 60 ))
+    if [[ "$ELAPSED_MIN" -ge "$MAX_DURATION" ]]; then
+      bash "$WRITE_STATE" status=done current_phase=timed_out
+      echo "{\"decision\": \"approve\", \"reason\": \"Loop timed out after ${ELAPSED_MIN} minutes (max: ${MAX_DURATION}). Session preserved for manual continuation or /buidl-resume.\"}" >&2
+      exit 0
+    fi
+  fi
+fi
 
 SESSION_DIR="$PROJECT_DIR/.claude/loop/sessions/$SESSION_NAME"
 
@@ -72,16 +101,14 @@ fi
 
 # If reviewer passed, we're done
 if [[ "$VERDICT" == "PASS" ]]; then
-  sedi "s/^status:.*/status: done/" "$STATE_FILE"
-  sedi "s/^current_phase:.*/current_phase: done/" "$STATE_FILE"
+  bash "$WRITE_STATE" status=done current_phase=done
   echo '{"decision": "approve", "reason": "Loop complete. Reviewer passed the PR."}' >&2
   exit 0
 fi
 
 # If max cycles reached, stop
 if [[ "$CYCLE" -ge "$MAX_CYCLES" ]]; then
-  sedi "s/^status:.*/status: failed/" "$STATE_FILE"
-  sedi "s/^current_phase:.*/current_phase: failed/" "$STATE_FILE"
+  bash "$WRITE_STATE" status=failed current_phase=failed
   cat >&2 << STOP_MSG
 {"decision": "approve", "reason": "Loop reached max cycles ($MAX_CYCLES). Remaining findings are in $LATEST_REVIEW. The PR is open for manual review and fixing."}
 STOP_MSG
@@ -90,10 +117,7 @@ fi
 
 # Continue the loop — increment cycle and re-inject prompt
 NEW_CYCLE=$((CYCLE + 1))
-sedi "s/^cycle:.*/cycle: $NEW_CYCLE/" "$STATE_FILE"
-sedi "s/^inner_retries:.*/inner_retries: 0/" "$STATE_FILE"
-sedi "s/^status:.*/status: building/" "$STATE_FILE"
-sedi "s/^current_phase:.*/current_phase: build/" "$STATE_FILE"
+bash "$WRITE_STATE" cycle="$NEW_CYCLE" inner_retries=0 status=building current_phase=build
 
 # Build the re-injection prompt
 FINDINGS=""

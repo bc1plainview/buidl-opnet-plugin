@@ -1,11 +1,23 @@
 ---
 description: "Full dev lifecycle: idea → challenge → spec → build → review → ship"
-argument-hint: '"raw idea" or path/to/spec/ [--max-cycles N] [--max-retries N] [--skip-challenge]'
+argument-hint: '"raw idea" or path/to/spec/ [--max-cycles N] [--max-retries N] [--skip-challenge] [--max-tokens N]'
 ---
 
 # The Loop
 
 You are orchestrating The Loop — a full development pipeline from idea to PR. Follow each phase in order. Do not skip phases unless explicitly instructed.
+
+## RULES
+
+These rules apply throughout the entire pipeline:
+
+1. **State writes**: NEVER write directly to `state.yaml` or `state.local.md`. Always use: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh key=value`
+2. **Checkpointing**: After EVERY phase transition, write a checkpoint (see Checkpoint Protocol below).
+3. **Cost tracking**: After EVERY agent dispatch, log to cost-ledger.md and update `tokens_used` in state.
+4. **max_turns per agent type**: Builders=30, Reviewers=15, Explorers=15, Researchers=10, Auditors=20, Deployers=15, UI Testers=20. Always pass `max_turns` when dispatching agents.
+5. **Structured errors**: When an agent fails, retry once with error context. On second failure, present 4 numbered options (retry with different approach, skip this agent, amend spec, cancel loop). Never ask open-ended "what should I do?" questions.
+6. **Context pressure**: If you detect context pressure (responses getting shorter, tool calls failing), immediately checkpoint and tell the user to run `/buidl-resume`.
+7. **Summaries across phases**: Never hold raw agent output across phase boundaries. Summarize, save to artifacts, then discard the raw output.
 
 ## Parse Input
 
@@ -22,6 +34,26 @@ Parse optional flags:
 - `--skip-challenge` (skip Phase 1)
 - `--builder-model opus|sonnet` (default inherit)
 - `--reviewer-model opus|sonnet` (default inherit)
+- `--max-tokens N` (default unlimited — if set, track and enforce token budget)
+
+### Auto-Detect Existing Session
+
+Before setup, check if a loop session already exists:
+
+```bash
+STATE_FILE=".claude/loop/state.yaml"
+LEGACY_STATE=".claude/loop/state.local.md"
+```
+
+If either file exists:
+1. Read `status` and `session_name` from the state file.
+2. If status is an active phase (challenging, specifying, exploring, building, reviewing, auditing, deploying, testing):
+   - Tell the user: "A loop session '`<session_name>`' is already active (status: `<status>`). Would you like to resume it?"
+   - Use AskUserQuestion with options:
+     1. **Resume existing** -- runs `/buidl-resume` logic
+     2. **Cancel and start fresh** -- runs `/buidl-cancel` then continues with new setup
+     3. **Cancel, clean, and start fresh** -- runs `/buidl-clean` then continues with new setup
+3. If status is `done` or `cancelled`: proceed with new setup (the old session is finished).
 
 ## Setup
 
@@ -33,6 +65,63 @@ Parse optional flags:
 3. Store the session directory path and worktree path for use throughout.
 
 If setup fails (not a git repo, loop already running), report the error and stop.
+
+### Initialize Cost Ledger
+
+Create `.claude/loop/sessions/<name>/cost-ledger.md`:
+```markdown
+# Cost Ledger: <session-name>
+
+| Timestamp | Agent | Phase | Tokens | Cumulative |
+|-----------|-------|-------|--------|------------|
+```
+
+## Checkpoint Protocol
+
+After every phase transition, write `.claude/loop/sessions/<name>/checkpoint.md`:
+
+```markdown
+# Checkpoint: <session-name>
+Updated: <ISO timestamp>
+
+## Position
+- Phase: <current phase>
+- Cycle: <N> / <max>
+- Step: <current step within phase>
+
+## Phases Completed
+- [x] challenge (or skipped)
+- [x] specify
+- [ ] explore
+- [ ] build
+- [ ] review
+
+## Agents Completed
+<list of agents that finished with pass/fail>
+
+## Key Decisions
+<important choices made during the session — tech stack, architecture, scope changes>
+
+## Next Action
+<what the orchestrator should do next if resuming>
+```
+
+Also update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=<phase> status=<status>`
+
+## Cost Tracking Protocol
+
+After every agent dispatch completes:
+1. Append a row to `cost-ledger.md` with timestamp, agent name, phase, and estimated tokens.
+2. Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh tokens_used=<cumulative>`
+3. If `--max-tokens` was set and cumulative exceeds the budget: present AskUserQuestion with options "Continue (budget is advisory)", "Cancel loop".
+
+## Learning Consultation (Phase 4 Step 0)
+
+Before dispatching builders, scan `${CLAUDE_PLUGIN_ROOT}/learning/` for past retrospectives:
+1. List all `.md` files in the learning directory.
+2. If any exist, read their "What Worked" and "Anti-Patterns" sections.
+3. If a retrospective matches the current project type or tech stack, incorporate its lessons into agent prompts.
+4. This is advisory — do not block on missing retrospectives.
 
 ---
 
@@ -101,6 +190,8 @@ Ask: "Is this a contract, frontend, backend, or full-stack project? What network
 ### Save Challenge Output
 
 Write the full Q&A to `.claude/loop/sessions/<name>/challenge.md`. This is the raw material for Phase 2.
+
+**Checkpoint:** Write checkpoint.md with phases_completed=[challenge], next_action="generate spec".
 
 ---
 
@@ -217,6 +308,8 @@ The user may:
 - Request changes → edit the documents and re-present
 - Cancel → stop the loop
 
+**Checkpoint:** Write checkpoint.md with phases_completed=[challenge, specify], next_action="explore codebase".
+
 ---
 
 ## PHASE 3: EXPLORE
@@ -241,6 +334,10 @@ Prompt: "Find code related to this feature spec: [paste spec objective and key r
 
 When both return, merge their outputs into `.claude/loop/sessions/<name>/context.md`.
 
+**Checkpoint:** Write checkpoint.md with phases_completed=[challenge, specify, explore], next_action="build with agents".
+
+Log cost for each explorer agent to cost-ledger.md.
+
 ---
 
 ## PHASE 4: BUILD — Multi-Agent Orchestration
@@ -249,7 +346,9 @@ When both return, merge their outputs into `.claude/loop/sessions/<name>/context
 
 Update state: `current_phase: build`, `status: building`, `cycle: 1`
 
-### Step 0: Project Type Detection
+### Step 0: Project Type Detection + Learning Consultation
+
+**Learning check:** Before detection, scan `${CLAUDE_PLUGIN_ROOT}/learning/` for past retrospectives. If any match the project type or tech stack detected below, note their lessons for agent prompts.
 
 Detect what kind of project this is:
 
@@ -317,7 +416,21 @@ For each step in the execution plan, the orchestrator:
 
 #### Agent Dispatch Template
 
-For each agent in the plan, construct the prompt:
+For each agent in the plan, construct the prompt and pass the appropriate `max_turns`:
+
+| Agent Type | max_turns |
+|-----------|-----------|
+| Builders (contract-dev, frontend-dev, backend-dev, loop-builder) | 30 |
+| Auditors (opnet-auditor) | 20 |
+| Deployers (opnet-deployer) | 15 |
+| UI Testers (opnet-ui-tester) | 20 |
+| Reviewers (loop-reviewer) | 15 |
+| Explorers (loop-explorer) | 15 |
+| Researchers (loop-researcher) | 10 |
+
+**Check elapsed time** before each agent dispatch. Read `started_at` and `max_duration` from state. If elapsed >= max_duration, checkpoint and stop.
+
+Prompt template:
 
 ```
 You are working in: [WORKTREE_PATH]
@@ -342,9 +455,23 @@ You are working in: [WORKTREE_PATH]
 ## Knowledge
 Read your knowledge file FIRST: ${CLAUDE_PLUGIN_ROOT}/knowledge/slices/[agent-slice].md
 
+## Lessons from Past Sessions
+[Include relevant lessons from learning/ retrospectives, if any]
+
 ## Output
 Write your artifacts to: .claude/loop/sessions/[name]/artifacts/[domain]/
 ```
+
+**After each agent completes:** Log to cost-ledger.md, update tokens_used in state.
+
+**If an agent fails:**
+1. Retry once, including the error output in the retry prompt.
+2. If retry also fails, present AskUserQuestion with exactly 4 numbered options:
+   - "Retry with a different approach"
+   - "Skip this agent and continue"
+   - "Amend the spec to work around this"
+   - "Cancel the loop"
+3. Never ask open-ended questions like "what should I do?"
 
 #### Step 2a: Contract Development (if components.contract = true)
 
@@ -372,7 +499,7 @@ After contract-dev completes, scan `artifacts/issues/` for new open issues:
    c. If count >= 2: log "Re-dispatch limit reached for {from}->{to}, deferring to auditor"
    d. If count < 2: increment count, dispatch target agent with the issue file as input context
 3. After re-dispatch completes, check for new issues (bounded by the 2-cycle limit)
-4. Update state.local.md with new redispatch_count values
+4. Update state via write-state.sh with new redispatch_count values
 ```
 
 If issues were found and resolved, continue to Step 2b. If issues are deferred, they'll be caught by the auditor in Step 2c.
@@ -409,7 +536,7 @@ After frontend-dev and/or backend-dev complete, scan `artifacts/issues/` for new
    c. If count >= 2: log "Re-dispatch limit reached, deferring to auditor"
    d. If count < 2: increment count, dispatch target agent with the issue file as input
 3. After re-dispatch, check for new issues (bounded by 2-cycle limit)
-4. Update state.local.md with new redispatch_count values
+4. Update state via write-state.sh with new redispatch_count values
 ```
 
 Common issue flows at this stage:
@@ -486,16 +613,31 @@ After all agents complete successfully:
 
 Record `pr_url` and `pr_number` in the state file.
 
-### Legacy Build (for non-OPNet projects)
+### Generic Build (for non-OPNet projects)
 
-If `project_type = "generic"`, fall back to the original single-agent builder:
+If `project_type = "generic"`, use dynamic agent generation:
 
-Launch the `loop-builder` agent with:
+#### Option A: Dynamic Domain Agents (if spec is complex enough)
+
+1. **Determine required roles** from the spec: what domains are involved? (e.g., API, database, auth, frontend, testing)
+2. **Check learning store** for past configs matching this tech stack.
+3. **Generate domain agents** to the session's `agents/` directory using `${CLAUDE_PLUGIN_ROOT}/templates/domain-agent.md` as the template. Fill in:
+   - Agent name and role
+   - Domain-specific constraints
+   - Relevant knowledge (from spec, codebase context, or generated knowledge slices)
+4. **Optionally generate knowledge slices** to `sessions/<name>/knowledge/` using `${CLAUDE_PLUGIN_ROOT}/templates/knowledge-slice.md`.
+5. **Show the user** the generated agent list and ask for approval before dispatching.
+6. **Execute** using the same orchestration pattern as OPNet flow: ordered steps, validation, error handling.
+
+#### Option B: Single Builder (for simple specs)
+
+If the spec has fewer than 5 tasks and touches a single domain, fall back to the `loop-builder` agent with:
 1. The three spec documents
 2. The codebase context
 3. The worktree path
 4. Any reviewer findings from previous cycles
 5. The project's CLAUDE.md if it exists
+6. `max_turns: 30`
 
 ---
 
@@ -579,3 +721,53 @@ When the loop completes (PASS or max cycles), provide:
 [If PASSED: "PR is ready for human review and merge."]
 [If FAILED: "These findings remain unresolved: ..." with the specific issues]
 ```
+
+---
+
+## PHASE 6: WRAP-UP (Retrospective)
+
+**Goal:** Capture lessons learned for future sessions.
+
+This phase runs automatically after Phase 5 completes (whether PASS or FAIL).
+
+### Generate Retrospective
+
+Write a retrospective to TWO locations:
+
+**1. Session copy:** `.claude/loop/sessions/<name>/retrospective.md`
+**2. Learning store:** `${CLAUDE_PLUGIN_ROOT}/learning/<session-name>.md`
+
+Format:
+
+```markdown
+# Retrospective: <session-name>
+Date: <ISO timestamp>
+Project Type: <opnet|generic>
+Outcome: <PASS on cycle N | FAILED after N cycles>
+Tokens Used: <from state>
+Duration: <elapsed minutes>
+
+## What Worked
+- [Effective patterns, good agent configs, successful strategies]
+
+## What Failed
+- [Agents that struggled, approaches that didn't work, time sinks]
+
+## Effective Agent Configs
+- [Which agents were most/least useful, optimal dispatch order]
+
+## Knowledge That Mattered
+- [Which knowledge slices were critical, what was missing]
+
+## Anti-Patterns
+- [Things to avoid next time — specific to this project type/stack]
+
+## Recommendations
+- [Concrete suggestions for similar future projects]
+```
+
+### Final Checkpoint
+
+Write final checkpoint.md with all phases completed and outcome.
+
+Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=wrapped_up`

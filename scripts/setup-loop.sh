@@ -4,7 +4,7 @@
 #
 # Creates:
 #   .claude/loop/sessions/<name>/  (session directory with artifacts subdirs)
-#   .claude/loop/state.local.md    (state file with YAML frontmatter)
+#   .claude/loop/state.yaml        (state file, written atomically via write-state.sh)
 #   .claude/worktrees/loop-<name>  (git worktree on branch loop/<name>)
 
 set -euo pipefail
@@ -15,23 +15,30 @@ MAX_RETRIES="${3:-5}"
 BUILDER_MODEL="${4:-inherit}"
 REVIEWER_MODEL="${5:-inherit}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WRITE_STATE="$SCRIPT_DIR/write-state.sh"
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 LOOP_DIR="$PROJECT_DIR/.claude/loop"
 SESSION_DIR="$LOOP_DIR/sessions/$SESSION_NAME"
-STATE_FILE="$LOOP_DIR/state.local.md"
+STATE_FILE="$LOOP_DIR/state.yaml"
 WORKTREE_PATH="$PROJECT_DIR/.claude/worktrees/loop-$SESSION_NAME"
 BRANCH_NAME="loop/$SESSION_NAME"
 
-# Check for existing running loop
-if [[ -f "$STATE_FILE" ]]; then
-  CURRENT_STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}')
-  if [[ "$CURRENT_STATUS" == "running" || "$CURRENT_STATUS" == "challenging" || "$CURRENT_STATUS" == "specifying" || "$CURRENT_STATUS" == "exploring" || "$CURRENT_STATUS" == "building" || "$CURRENT_STATUS" == "reviewing" || "$CURRENT_STATUS" == "auditing" || "$CURRENT_STATUS" == "deploying" || "$CURRENT_STATUS" == "testing" ]]; then
-    CURRENT_NAME=$(grep '^session_name:' "$STATE_FILE" | head -1 | awk '{print $2}')
-    echo "ERROR: A loop is already running: $CURRENT_NAME (status: $CURRENT_STATUS)" >&2
-    echo "Run /buidl-cancel to stop it first, or /buidl-status to check on it." >&2
-    exit 2
+# Check for existing running loop (check both state.yaml and legacy state.local.md)
+for candidate in "$STATE_FILE" "$LOOP_DIR/state.local.md"; do
+  if [[ -f "$candidate" ]]; then
+    CURRENT_STATUS=$(grep '^status:' "$candidate" | head -1 | awk '{print $2}')
+    case "$CURRENT_STATUS" in
+      running|challenging|specifying|exploring|building|reviewing|auditing|deploying|testing)
+        CURRENT_NAME=$(grep '^session_name:' "$candidate" | head -1 | awk '{print $2}')
+        echo "ERROR: A loop is already running: $CURRENT_NAME (status: $CURRENT_STATUS)" >&2
+        echo "Run /buidl-cancel to stop it first, or /buidl-status to check on it." >&2
+        exit 2
+        ;;
+    esac
   fi
-fi
+done
 
 # Check we're in a git repo
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -48,6 +55,9 @@ mkdir -p "$SESSION_DIR/artifacts/audit"
 mkdir -p "$SESSION_DIR/artifacts/deployment"
 mkdir -p "$SESSION_DIR/artifacts/testing/screenshots"
 mkdir -p "$SESSION_DIR/artifacts/issues"
+# New v3 directories for dynamic agent generation and knowledge
+mkdir -p "$SESSION_DIR/agents"
+mkdir -p "$SESSION_DIR/knowledge"
 
 # Create worktree
 if [[ -d "$WORKTREE_PATH" ]]; then
@@ -88,10 +98,24 @@ if grep -q "@btc-vision" "$PROJECT_DIR/package.json" 2>/dev/null || grep -q '"op
   PROJECT_TYPE="opnet"
 fi
 
-# Write state file
+# Prune learning store — keep only the 20 most recent retrospectives
+LEARNING_DIR="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR/..}/learning"
+if [[ -d "$LEARNING_DIR" ]]; then
+  RETRO_COUNT=$(find "$LEARNING_DIR" -name "*.md" -not -name ".gitkeep" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$RETRO_COUNT" -gt 20 ]]; then
+    # Remove oldest files beyond the cap (sorted by modification time)
+    find "$LEARNING_DIR" -name "*.md" -not -name ".gitkeep" -print0 2>/dev/null \
+      | xargs -0 ls -1t \
+      | tail -n +"21" \
+      | xargs rm -f
+    echo "Pruned learning store: kept 20 most recent, removed $((RETRO_COUNT - 20)) old retrospectives."
+  fi
+fi
+
+# Write state file atomically via write-state.sh
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-cat > "$STATE_FILE" << EOF
----
+export STATE_FILE
+bash "$WRITE_STATE" << EOF
 status: challenging
 session_name: $SESSION_NAME
 cycle: 0
@@ -107,6 +131,9 @@ reviewer_model: $REVIEWER_MODEL
 started_at: $TIMESTAMP
 current_phase: challenge
 project_type: $PROJECT_TYPE
+max_duration: 60
+tokens_used: 0
+phases_completed: []
 components:
   contract: $COMPONENT_CONTRACT
   frontend: $COMPONENT_FRONTEND
@@ -119,7 +146,7 @@ agent_status:
   opnet-auditor: pending
   opnet-deployer: pending
   opnet-ui-tester: pending
-  opnet-reviewer: pending
+  loop-reviewer: pending
 current_step: 0
 audit_verdict: ""
 audit_cycles: 0
@@ -128,7 +155,6 @@ deployment_network: ""
 redispatch_count: {}
 issues_resolved: 0
 issues_deferred: 0
----
 EOF
 
 echo "Loop initialized:"
@@ -138,6 +164,7 @@ echo "  Worktree: $WORKTREE_PATH"
 echo "  Branch: $BRANCH_NAME"
 echo "  Max cycles: $MAX_CYCLES"
 echo "  Max retries: $MAX_RETRIES"
+echo "  Max duration: 60 minutes"
 echo "  Project type: $PROJECT_TYPE"
 echo "  Components: contract=$COMPONENT_CONTRACT frontend=$COMPONENT_FRONTEND backend=$COMPONENT_BACKEND"
 echo "  Artifacts dir: $SESSION_DIR/artifacts/"

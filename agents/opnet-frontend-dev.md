@@ -54,6 +54,8 @@ Before writing ANY code, read [knowledge/slices/frontend-dev.md](knowledge/slice
 
 Every rule in that document came from a real bug. The 19 documented frontend mistakes are all things agents have actually done.
 
+Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) -- the "Frontend Simulation Pattern" section shows how to simulate before wallet signing.
+
 If you encounter issues, also check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 
 ## Core Rules (NON-NEGOTIABLE)
@@ -174,7 +176,9 @@ export function getCachedContract(address: string, abi: ContractABI, provider: J
     if (!contractCache.has(key)) {
         contractCache.set(key, getContract<IOP_20Contract>(address, abi, provider, network, sender));
     }
-    return contractCache.get(key)!;
+    const cached = contractCache.get(key);
+    if (!cached) throw new Error(`Contract not found in cache for key: ${key}`);
+    return cached;
 }
 ```
 

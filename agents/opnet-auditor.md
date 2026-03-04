@@ -273,4 +273,4 @@ Note: You are READ-ONLY and cannot write files. The orchestrator extracts issue 
 5. HIGH: can cause incorrect behavior, data corruption, or denial of service.
 6. MEDIUM: code quality issues that could become vulnerabilities.
 7. LOW: best practice violations with minimal risk.
-8. Save findings to the audit artifacts directory.
+8. Include all findings in your output text — the orchestrator saves them to the audit artifacts directory.

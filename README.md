@@ -58,8 +58,9 @@ Flags:
 | `/buidl path/to/spec/` | Skip to build from an existing spec directory |
 | `/buidl-spec "idea"` | Spec-only mode — refine idea into spec without building |
 | `/buidl-review 42` | Review an existing PR with the loop reviewer |
-| `/buidl-status` | Show current loop state |
-| `/buidl-cancel` | Cancel a running loop |
+| `/buidl-status` | Show current loop state (tokens, elapsed, checkpoint) |
+| `/buidl-cancel` | Cancel a running loop (preserves worktree) |
+| `/buidl-resume` | Resume an interrupted loop from last checkpoint |
 | `/buidl-clean` | Cancel + remove worktree and branch |
 
 ## Agents
@@ -133,47 +134,64 @@ The standalone `audit-from-bugs` skill can also be triggered by asking Claude to
         ▼
    Phase 1: CHALLENGE
    Five gates + spec questions + pre-mortem
-        │
+        │  checkpoint
         ▼
    Phase 2: SPECIFY
    requirements.md + design.md + tasks.md
-        │
+        │  checkpoint
         ▼
    Phase 3: EXPLORE
    Two explorer agents map the codebase in parallel
-        │
+        │  checkpoint + cost log
         ▼
-   Phase 4: BUILD (multi-agent)
+   Phase 4: BUILD (multi-agent, with cost tracking)
    Orchestrator detects components, dispatches:
-     ├── contract-dev  (first, produces ABI)
-     ├── frontend-dev  (parallel with backend)
-     ├── backend-dev   (parallel with frontend)
-     ├── auditor       (after all builders finish)
-     ├── deployer      (after audit passes)
-     └── ui-tester     (after deploy)
-        │
+     ├── contract-dev  (first, produces ABI)     max_turns: 30
+     ├── frontend-dev  (parallel with backend)   max_turns: 30
+     ├── backend-dev   (parallel with frontend)  max_turns: 30
+     ├── auditor       (after all builders)      max_turns: 20
+     ├── deployer      (after audit passes)      max_turns: 15
+     └── ui-tester     (after deploy)            max_turns: 20
+        │  checkpoint after each agent
         ▼
    Phase 5: REVIEW
    Reviewer checks PR against spec + 27 patterns
+        │  checkpoint
+        ▼
+   Phase 6: WRAP-UP
+   Retrospective → learning store
         │
         ▼
    PASS → PR ready for human review
    FAIL → findings routed to responsible agent, loop continues
 ```
 
+If the loop is interrupted (context exhaustion, timeout, manual cancel), run `/buidl-resume` to continue from the last checkpoint.
+
+## Resilience Features (v3.0)
+
+- **Atomic state writes**: All state mutations go through `scripts/write-state.sh` (temp file + atomic rename). A PreToolUse guard hook blocks direct writes to state files during active loops.
+- **Checkpointing**: Every phase transition saves position to `checkpoint.md`. If context exhausts, `/buidl-resume` picks up where you left off.
+- **Wall-clock timeout**: Configurable max duration (default 60 min). Timed-out sessions are gracefully saved for resume.
+- **Cost tracking**: Token spend logged per agent in `cost-ledger.md`. Use `--max-tokens N` to set a budget.
+- **Learning system**: Retrospectives from completed sessions are saved to `learning/`. Future sessions consult past lessons for matching project types.
+- **Dynamic agents**: Generic (non-OPNet) projects can generate domain-specific agents from templates instead of using a single generic builder.
+
 ## Project Structure
 
 ```
 buidl/
 ├── .claude-plugin/
-│   └── plugin.json            # Plugin manifest
+│   └── plugin.json            # Plugin manifest (v3.0.0)
 ├── agents/                    # 10 agent definitions
-├── commands/                  # 6 slash commands
-├── hooks/                     # Stop hook for loop continuation
+├── commands/                  # 7 slash commands
+├── hooks/                     # Stop hook + state guard hook
 │   └── scripts/
 ├── knowledge/                 # OPNet reference docs + slices
 │   └── slices/
-├── scripts/                   # Setup script for loop sessions
+├── learning/                  # Retrospectives from past sessions
+├── scripts/                   # Setup + atomic state writer
+├── templates/                 # Domain agent + knowledge slice templates
 └── skills/                    # 2 triggerable skills
     ├── audit-from-bugs/
     └── loop-guide/
@@ -187,18 +205,21 @@ Run the structural validation suite locally:
 bash tests/plugin-tests.sh
 ```
 
-The test suite validates 117 invariants across 8 categories:
+The test suite validates ~145 invariants across 11 categories:
 
 | Category | What it checks |
 |----------|----------------|
-| Shell syntax | `bash -n` on all scripts |
-| Shell correctness | `sedi()` not recursive, no literal `\n` |
+| Shell syntax | `bash -n` on all scripts (4 scripts) |
+| Shell correctness | write-state.sh usage, no literal `\n` |
 | Agent structure | 5 required sections in all 10 agents |
 | FORBIDDEN blocks | Present in all 6 specialist agents |
 | Knowledge refs | All slice paths in agents resolve to existing files |
 | Issue bus schema | 7 issue types consistent across agents |
 | Version consistency | `plugin.json` matches `CHANGELOG.md` |
-| File existence | All required files present |
+| File existence | All required files present (including v3 additions) |
+| Atomic state | write-state.sh exists and is executable |
+| State guard | guard-state.sh exists and hooks.json has PreToolUse |
+| Templates | domain-agent.md and knowledge-slice.md exist |
 
 Tests run automatically on every push and PR via GitHub Actions.
 
