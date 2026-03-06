@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.2.0] - 2026-03-07
+
+### Added
+- **On-chain E2E tester agent** (`opnet-e2e-tester`): New agent that runs REAL on-chain transactions against deployed contracts using test wallets. Tests every public method — read-only, state-changing, and payable — with actual testnet BTC and block confirmations. Supports multi-wallet flows (seller/buyer, staker/claimer) and UTXO chaining.
+- **E2E testing knowledge slice** (`knowledge/slices/e2e-testing.md`): Complete reference for on-chain E2E testing patterns, wallet setup, payable method testing, the `output.to` bech32 vs ML-DSA hex gotcha (INC-mmfi7bj9-da60c9), multi-party flow templates, and common failure table.
+- **Mandatory E2E gate in orchestrator**: Step 2e in the build phase now runs `opnet-e2e-tester` BEFORE UI testing. Nothing is declared "ready" until real on-chain tests pass. This is non-negotiable for any project that deploys a contract.
+
+### Changed
+- **Execution plans updated**: All three plan templates (contract-only, frontend-only, full-stack) now include the E2E tester in the correct position after deployment.
+- **Deployer agent**: Added Step 8 (E2E test handoff) — deployer now ensures receipt includes everything the E2E tester needs.
+- **Agent dispatch table**: Added `opnet-e2e-tester` with `max_turns: 25`.
+- **Summary output**: Includes on-chain E2E test results section with per-method pass/fail, tx hashes, and explorer links.
+- **README**: Updated agent count (7 → 8), pipeline diagram, knowledge slice list. Description emphasizes "fully tested" and "user never has to manually test."
+- **Knowledge README**: Added `e2e-testing.md` to the slice list and domain rules.
+
+### Why
+The Nexus marketplace C-02 bug proved that simulation-passing code can fail on-chain. The `output.to` field is ML-DSA hex during simulation but bech32 during real execution — invisible to every testing method except real on-chain transactions. This gap cost days of manual debugging. The E2E tester agent eliminates this class of bugs entirely. The user should never have to manually test contract interactions again.
+
 ## [3.1.0] - 2026-03-04
 
 ### Added

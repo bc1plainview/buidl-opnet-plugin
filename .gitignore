@@ -1,0 +1,17 @@
+# Session state (per-user, not repo-shared)
+.claude/loop/state.yaml
+.claude/loop/state.local.md
+.claude/loop/sessions/
+.claude/worktrees/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+package-lock.json
+
+# Env/secrets
+.env
+.env.*
+*.wif

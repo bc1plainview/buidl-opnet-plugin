@@ -2,7 +2,7 @@
 
 [![Plugin Tests](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml/badge.svg)](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml)
 
-A Claude Code plugin that turns a single prompt into a production-ready, audited OPNet Bitcoin L1 dApp. 7 specialized agents handle contract development, frontend, backend, security audit, deployment, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle.
+A Claude Code plugin that turns a single prompt into a production-ready, audited, and **fully tested** OPNet Bitcoin L1 dApp. 8 specialized agents handle contract development, frontend, backend, security audit, deployment, real on-chain E2E testing, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle. The user never has to manually test anything.
 
 Built on top of the `/buidl` dev loop (idea → challenge → spec → build → review → ship), extended with OPNet-specific agents, knowledge slices, and 27 real-bug audit patterns from the btc-vision repos.
 
@@ -74,7 +74,8 @@ The orchestrator dispatches work to specialized agents based on what the project
 | `opnet-backend-dev` | hyper-express backend services | sonnet |
 | `opnet-auditor` | READ-ONLY security audit (27 real-bug patterns + full checklist) | sonnet |
 | `opnet-deployer` | TransactionFactory deployment to testnet/mainnet | sonnet |
-| `opnet-ui-tester` | Puppeteer smoke tests + E2E + screenshot capture | sonnet |
+| `opnet-e2e-tester` | REAL on-chain E2E tests with test wallets (mandatory gate) | sonnet |
+| `opnet-ui-tester` | Playwright smoke tests + E2E + screenshot capture | sonnet |
 | `loop-reviewer` | PR review against spec + 27-pattern checklist | inherit |
 
 Supporting agents (not OPNet-specific):
@@ -99,6 +100,7 @@ knowledge/
     ├── backend-dev.md          # Backend agent reads this
     ├── security-audit.md       # Auditor reads this (includes 27 real-bug patterns)
     ├── deployment.md           # Deployer reads this
+    ├── e2e-testing.md          # On-chain E2E tester reads this
     ├── ui-testing.md           # UI tester reads this
     ├── integration-review.md   # Reviewer reads this
     └── project-setup.md        # All agents reference this
@@ -151,7 +153,8 @@ The standalone `audit-from-bugs` skill can also be triggered by asking Claude to
      ├── backend-dev   (parallel with frontend)  max_turns: 30
      ├── auditor       (after all builders)      max_turns: 20
      ├── deployer      (after audit passes)      max_turns: 15
-     └── ui-tester     (after deploy)            max_turns: 20
+     ├── e2e-tester    (MANDATORY after deploy)  max_turns: 25
+     └── ui-tester     (after e2e passes)        max_turns: 20
         │  checkpoint after each agent
         ▼
    Phase 5: REVIEW

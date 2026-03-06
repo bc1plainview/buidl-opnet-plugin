@@ -383,6 +383,7 @@ Based on detected components, build an ordered execution plan:
 Step 1: opnet-contract-dev → compile + test
 Step 2: opnet-auditor → audit contract
 Step 3: opnet-deployer → deploy to testnet (if audit PASS)
+Step 4: opnet-e2e-tester → REAL on-chain tests against deployed contract (MANDATORY)
 ```
 
 **Frontend-only project (existing contract):**
@@ -400,8 +401,11 @@ Step 2 (parallel after ABI ready):
   - opnet-backend-dev → build backend (imports ABI) [if needed]
 Step 3: opnet-auditor → audit ALL code
 Step 4: opnet-deployer → deploy contract (if audit PASS)
-Step 5: opnet-ui-tester → smoke + E2E tests (needs deployed address)
+Step 5: opnet-e2e-tester → REAL on-chain tests (MANDATORY before declaring ready)
+Step 6: opnet-ui-tester → smoke + Playwright E2E tests (needs deployed address)
 ```
+
+**CRITICAL RULE: On-chain E2E testing (opnet-e2e-tester) is NEVER skipped for projects that deploy contracts. The user should NEVER have to manually test contract interactions. The agent does ALL testing — read methods, write methods, payable methods, multi-wallet flows — using real testnet transactions with real block confirmations.**
 
 Write the execution plan to the state file.
 
@@ -423,6 +427,7 @@ For each agent in the plan, construct the prompt and pass the appropriate `max_t
 | Builders (contract-dev, frontend-dev, backend-dev, loop-builder) | 30 |
 | Auditors (opnet-auditor) | 20 |
 | Deployers (opnet-deployer) | 15 |
+| E2E Testers (opnet-e2e-tester) | 25 |
 | UI Testers (opnet-ui-tester) | 20 |
 | Reviewers (loop-reviewer) | 15 |
 | Explorers (loop-explorer) | 15 |
@@ -584,13 +589,45 @@ Launch `opnet-deployer` agent:
 
 After successful deployment, update frontend config with the deployed contract address.
 
-#### Step 2e: UI Testing (after deployment)
+#### Step 2e: On-Chain E2E Testing (MANDATORY — after deployment)
+
+**This step is NON-NEGOTIABLE. Nothing is declared "ready" until real on-chain tests pass.**
+
+Launch `opnet-e2e-tester` agent:
+- Knowledge: `knowledge/slices/e2e-testing.md`
+- Import: Deployed contract address from `artifacts/deployment/receipt.json`
+- Import: Contract ABI from `artifacts/contract/abi.json`
+- Import: Spec documents (requirements.md, tasks.md) for expected behavior
+- Import: Test wallet credentials (paths to .env files)
+- Output: `artifacts/testing/e2e-results.json`, `artifacts/testing/e2e-plan.md`
+
+The E2E tester:
+1. Inventories all public contract methods from the ABI
+2. Writes test scripts that send REAL transactions on testnet
+3. Tests every method: read-only, state-changing, AND payable
+4. For multi-party flows (marketplace, swap, etc.): uses separate wallets for each role
+5. Waits for block confirmations — broadcast alone is not a pass
+6. Verifies final on-chain state matches expected values from the spec
+
+**Why simulation is not enough:** The OPNet node provides `output.to` as bech32 in real transactions but ML-DSA hex in simulation. `output.scriptPublicKey` is null in real transactions. Contracts that only validate against simulation format will pass simulation but revert on-chain. This agent catches those bugs.
+
+**Decision after E2E tests:**
+- If all on-chain tests pass: proceed to UI testing (Step 2f)
+- If on-chain tests fail:
+  - Route contract failures to `opnet-contract-dev` for fixes
+  - After fixes: re-deploy and re-run E2E tester
+  - Max E2E test cycles: 2 (if still FAIL, report to user and stop)
+  - NEVER skip on-chain E2E failures — they represent real bugs that burn BTC
+
+**Human blocker check:** If E2E tests require funded test wallets that don't exist yet, surface this to the user ONCE with exact instructions (which address to fund, how many sats needed). This is the ONE thing the user may need to do. Everything else is automated.
+
+#### Step 2f: UI Testing (after on-chain E2E passes)
 
 Launch `opnet-ui-tester` agent:
 - Knowledge: `knowledge/slices/ui-testing.md`
 - Import: Deployed contract address from `artifacts/deployment/receipt.json`
 - Import: Frontend dev server port from `artifacts/frontend/build-result.json`
-- Output: `artifacts/testing/results.json`, `artifacts/testing/screenshots/`
+- Output: `artifacts/testing/ui-results.json`, `artifacts/testing/screenshots/`
 
 **Decision after tests:**
 - If all tests pass: proceed to commit + PR
@@ -707,6 +744,10 @@ When the loop completes (PASS or max cycles), provide:
 
 ### Deployment
 [Network, contract address, explorer links — or "skipped" if no deployment]
+
+### On-Chain E2E Test Results
+[Per-method pass/fail, tx hashes, block numbers, final state verification — or "skipped" if no deployment]
+[Include explorer links for every on-chain test transaction]
 
 ### UI Test Results
 [Pass/fail summary — or "skipped" if no frontend]

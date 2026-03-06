@@ -13,6 +13,7 @@ knowledge/
     ├── backend-dev.md          Backend agent knowledge
     ├── security-audit.md       Auditor + reviewer knowledge
     ├── deployment.md           Deployer agent knowledge
+    ├── e2e-testing.md          On-chain E2E tester knowledge (MANDATORY gate)
     ├── ui-testing.md           UI tester knowledge
     ├── integration-review.md   Reviewer cross-layer checks
     └── project-setup.md        Shared setup reference
@@ -51,7 +52,8 @@ These rules are authoritative in each slice and may extend or specialize the bib
 - `backend-dev.md`: hyper-express, worker threads, MongoDB, rate limiting, health checks
 - `security-audit.md`: 27 PAT-XX patterns, vulnerability catalog, audit methodology
 - `deployment.md`: TransactionFactory, pre-deploy checklist, receipt format
-- `ui-testing.md`: Puppeteer patterns, wallet mocking, screenshot conventions
+- `e2e-testing.md`: Real on-chain testing, payable method patterns, multi-wallet flows, output.to bech32 gotcha
+- `ui-testing.md`: Playwright patterns, wallet mocking, screenshot conventions
 - `integration-review.md`: Cross-layer ABI checks, signer validation, network consistency
 
 ## Maintenance

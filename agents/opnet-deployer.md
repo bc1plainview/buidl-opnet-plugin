@@ -149,6 +149,17 @@ If a frontend exists, update the contract address configuration:
 - Update the contract address for the deployed network
 - This allows the frontend to interact with the deployed contract
 
+### 8. Prepare E2E Test Handoff (MANDATORY)
+
+After deployment, the on-chain E2E tester (`opnet-e2e-tester`) runs next. Ensure the receipt includes everything it needs:
+
+- `contractAddress` in both bech32 and hex format
+- `network` identifier
+- Paths to test wallet `.env` files (if they exist in the deploy directory)
+- ABI path for the deployed contract
+
+The E2E tester will send REAL transactions against this contract. Deployment is not the final step — on-chain verification is.
+
 ## Network Configuration
 
 | Network | RPC URL | networks.* | Explorer |
