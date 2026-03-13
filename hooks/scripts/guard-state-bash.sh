@@ -45,7 +45,7 @@ if echo "$COMMAND" | grep -qE '(state\.yaml|state\.local\.md)' && echo "$COMMAND
   STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
 
   case "$STATUS" in
-    challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing)
+    challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing|validating)
       echo '{"decision":"block","reason":"Shell commands writing to state files are blocked during active loops. Use write-state.sh instead: bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh key=value"}' >&2
       exit 2
       ;;

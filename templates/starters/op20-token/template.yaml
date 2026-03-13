@@ -1,0 +1,43 @@
+# OP-20 Token Starter Template
+# Clone and customize — do NOT modify these template files during build.
+
+name: op20-token
+description: Standard OP-20 fungible token with metadata, transfer, and allowance
+project_type: opnet
+components:
+  contract: true
+  frontend: true
+  backend: false
+
+# Customization points — agent should replace these placeholders
+customization:
+  token_name: "MyToken"           # Replace with actual token name
+  token_symbol: "MTK"             # Replace with actual symbol
+  token_decimals: 18              # Standard is 18
+  initial_supply: "1000000"       # In whole tokens (will be multiplied by 10^decimals)
+  max_supply: "10000000"          # Maximum supply cap (0 = unlimited)
+  features:
+    burnable: false               # Add burn() method
+    mintable: false               # Add mint() method (owner-only)
+    pausable: false               # Add pause/unpause (owner-only)
+
+# Files to clone
+contract_files:
+  - src/MyToken.ts                # Main contract — rename to match token_name
+  - tests/MyToken.test.ts         # Unit tests — rename to match
+  - asconfig.json                 # AssemblyScript config
+
+frontend_files:
+  - src/App.tsx                   # Main app with wallet connect + token UI
+  - src/hooks/useToken.ts         # Token interaction hook
+  - vite.config.ts                # OPNet-ready Vite config with polyfills
+  - package.json                  # Dependencies with semver ranges
+
+# Post-clone instructions for agents
+instructions: |
+  1. Replace all placeholder values (MyToken, MTK, etc.) with spec values
+  2. If features.burnable/mintable/pausable are true, uncomment the relevant sections
+  3. Update package.json name field
+  4. Run npm install after customizing package.json
+  5. Run the full verify pipeline (lint, typecheck, build, test)
+  6. Do NOT add features not in the spec — the template is the starting point, not the final product

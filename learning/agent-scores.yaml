@@ -1,0 +1,114 @@
+# Agent Performance Scores — Auto-updated after each session
+# Schema per agent:
+#   sessions_completed: total sessions where this agent was dispatched
+#   success_rate: fraction completed without human intervention (0.0-1.0)
+#   avg_cycles_to_pass: average review cycles before PASS
+#   avg_tokens: average tokens consumed per session
+#   strengths: [auto-detected from successful task categories]
+#   weaknesses: [auto-detected from failed task categories]
+#   model_history:
+#     - model: sonnet|opus|haiku
+#       sessions: N
+#       success_rate: 0.0-1.0
+#
+# Managed by: scripts/update-scores.sh
+# Do not edit manually — scores are auto-updated from session state.
+# Requires 5+ data points before scores are shown in /buidl-status.
+
+agents:
+  opnet-contract-dev:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-frontend-dev:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-backend-dev:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-auditor:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-deployer:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-e2e-tester:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  opnet-ui-tester:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  loop-builder:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  loop-reviewer:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  cross-layer-validator:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  loop-explorer:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  loop-researcher:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []

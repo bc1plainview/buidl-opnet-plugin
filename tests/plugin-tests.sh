@@ -920,6 +920,210 @@ else
 fi
 
 # ─────────────────────────────────────────────────
+echo ""
+echo "=== Adaptive Learning System ==="
+
+# Pattern store
+if [[ -f "learning/patterns.yaml" ]]; then
+  pass "learning/patterns.yaml exists"
+else
+  fail "learning/patterns.yaml MISSING"
+fi
+
+if python3 -c "import yaml; yaml.safe_load(open('learning/patterns.yaml'))" 2>/dev/null; then
+  pass "learning/patterns.yaml is valid YAML"
+else
+  fail "learning/patterns.yaml is NOT valid YAML"
+fi
+
+# Agent scores
+if [[ -f "learning/agent-scores.yaml" ]]; then
+  pass "learning/agent-scores.yaml exists"
+else
+  fail "learning/agent-scores.yaml MISSING"
+fi
+
+if python3 -c "import yaml; yaml.safe_load(open('learning/agent-scores.yaml'))" 2>/dev/null; then
+  pass "learning/agent-scores.yaml is valid YAML"
+else
+  fail "learning/agent-scores.yaml is NOT valid YAML"
+fi
+
+# Extraction scripts
+if [[ -f "scripts/extract-patterns.sh" ]]; then
+  pass "scripts/extract-patterns.sh exists"
+else
+  fail "scripts/extract-patterns.sh MISSING"
+fi
+
+if bash -n scripts/extract-patterns.sh 2>/dev/null; then
+  pass "extract-patterns.sh passes bash -n"
+else
+  fail "extract-patterns.sh FAILS bash -n"
+fi
+
+if [[ -x "scripts/extract-patterns.sh" ]]; then
+  pass "extract-patterns.sh is executable"
+else
+  fail "extract-patterns.sh is NOT executable"
+fi
+
+if [[ -f "scripts/update-scores.sh" ]]; then
+  pass "scripts/update-scores.sh exists"
+else
+  fail "scripts/update-scores.sh MISSING"
+fi
+
+if bash -n scripts/update-scores.sh 2>/dev/null; then
+  pass "update-scores.sh passes bash -n"
+else
+  fail "update-scores.sh FAILS bash -n"
+fi
+
+if [[ -x "scripts/update-scores.sh" ]]; then
+  pass "update-scores.sh is executable"
+else
+  fail "update-scores.sh is NOT executable"
+fi
+
+# Orchestrator references
+if grep -q 'patterns.yaml' commands/buidl.md; then
+  pass "buidl.md references patterns.yaml"
+else
+  fail "buidl.md does NOT reference patterns.yaml"
+fi
+
+if grep -q 'agent-scores.yaml' commands/buidl.md; then
+  pass "buidl.md references agent-scores.yaml"
+else
+  fail "buidl.md does NOT reference agent-scores.yaml"
+fi
+
+if grep -q 'extract-patterns.sh' commands/buidl.md; then
+  pass "buidl.md references extract-patterns.sh"
+else
+  fail "buidl.md does NOT reference extract-patterns.sh"
+fi
+
+if grep -q 'update-scores.sh' commands/buidl.md; then
+  pass "buidl.md references update-scores.sh"
+else
+  fail "buidl.md does NOT reference update-scores.sh"
+fi
+
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Cross-Layer Validator ==="
+
+if [[ -f "agents/cross-layer-validator.md" ]]; then
+  pass "cross-layer-validator.md exists"
+else
+  fail "cross-layer-validator.md MISSING"
+fi
+
+for section in "## Constraints" "## Step 0" "## Process" "## Output Format" "## Rules"; do
+  if grep -q "$section" agents/cross-layer-validator.md; then
+    pass "cross-layer-validator has '$section'"
+  else
+    fail "cross-layer-validator MISSING '$section'"
+  fi
+done
+
+if [[ -f "knowledge/slices/cross-layer-validation.md" ]]; then
+  pass "cross-layer-validation.md knowledge slice exists"
+else
+  fail "cross-layer-validation.md knowledge slice MISSING"
+fi
+
+if grep -q 'cross-layer-validation.md' agents/cross-layer-validator.md; then
+  pass "cross-layer-validator references its knowledge slice"
+else
+  fail "cross-layer-validator does NOT reference its knowledge slice"
+fi
+
+if grep -q 'cross-layer-validator' commands/buidl.md; then
+  pass "buidl.md references cross-layer-validator"
+else
+  fail "buidl.md does NOT reference cross-layer-validator"
+fi
+
+if grep -q 'validating' hooks/scripts/stop-hook.sh; then
+  pass "stop-hook.sh includes 'validating' phase"
+else
+  fail "stop-hook.sh MISSING 'validating' phase"
+fi
+
+if grep -q 'validating' hooks/scripts/guard-state.sh; then
+  pass "guard-state.sh includes 'validating' phase"
+else
+  fail "guard-state.sh MISSING 'validating' phase"
+fi
+
+if grep -q 'validating' hooks/scripts/guard-state-bash.sh; then
+  pass "guard-state-bash.sh includes 'validating' phase"
+else
+  fail "guard-state-bash.sh MISSING 'validating' phase"
+fi
+
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Starter Templates ==="
+
+if [[ -d "templates/starters/op20-token" ]]; then
+  pass "op20-token starter template directory exists"
+else
+  fail "op20-token starter template directory MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/template.yaml" ]]; then
+  pass "op20-token template.yaml exists"
+else
+  fail "op20-token template.yaml MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/contract/src/MyToken.ts" ]]; then
+  pass "op20-token contract source exists"
+else
+  fail "op20-token contract source MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/contract/tests/MyToken.test.ts" ]]; then
+  pass "op20-token contract tests exist"
+else
+  fail "op20-token contract tests MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/contract/asconfig.json" ]]; then
+  pass "op20-token asconfig.json exists"
+else
+  fail "op20-token asconfig.json MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/frontend/src/App.tsx" ]]; then
+  pass "op20-token frontend App.tsx exists"
+else
+  fail "op20-token frontend App.tsx MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/frontend/vite.config.ts" ]]; then
+  pass "op20-token frontend vite.config.ts exists"
+else
+  fail "op20-token frontend vite.config.ts MISSING"
+fi
+
+if [[ -f "templates/starters/op20-token/frontend/package.json" ]]; then
+  pass "op20-token frontend package.json exists"
+else
+  fail "op20-token frontend package.json MISSING"
+fi
+
+if grep -q 'starters' commands/buidl.md; then
+  pass "buidl.md references starter templates"
+else
+  fail "buidl.md does NOT reference starter templates"
+fi
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 echo ""
