@@ -34,6 +34,14 @@ SESSION_NAME=$(grep '^# Retrospective:' "$RETRO_FILE" | head -1 | sed 's/^# Retr
 PROJECT_TYPE=$(grep '^Project Type:' "$RETRO_FILE" | head -1 | awk '{print $3}' || echo "generic")
 TODAY=$(date '+%Y-%m-%d')
 
+# Detect current plugin version from plugin.json
+PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+CURRENT_VERSION="0.0.0"
+if [[ -f "$PLUGIN_JSON" ]]; then
+  CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null || echo "0.0.0")
+fi
+CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+
 # Extract anti-patterns section (between "## Anti-Patterns" and next "##")
 # || true prevents pipefail exit when grep finds no matches
 ANTI_PATTERNS=$(sed -n '/^## Anti-Patterns/,/^## /{/^## Anti-Patterns/d;/^## /d;p}' "$RETRO_FILE" | grep '^- ' | sed 's/^- //' || true)
@@ -105,12 +113,21 @@ idx = int(sys.argv[2])
 new_count = int(sys.argv[3])
 today = sys.argv[4]
 session_name = sys.argv[5]
+version = sys.argv[6]
+current_major = int(sys.argv[7])
 
 with open(patterns_file) as f:
     data = yaml.safe_load(f)
 patterns = data.get('patterns', [])
 patterns[idx]['occurrence_count'] = new_count
 patterns[idx]['last_seen'] = today
+patterns[idx]['last_seen_version'] = version
+
+# Compute stale flag based on major version comparison
+pat_version = patterns[idx].get('last_seen_version', version)
+pat_major = int(pat_version.split('.')[0]) if pat_version else 0
+patterns[idx]['stale'] = (current_major - pat_major) >= 2
+
 sessions = patterns[idx].get('source_sessions', [])
 if session_name not in sessions:
     sessions.append(session_name)
@@ -120,7 +137,7 @@ if new_count >= 3:
 data['patterns'] = patterns
 with open(patterns_file, 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-" "$PATTERNS_FILE" "$IDX" "$NEW_COUNT" "$TODAY" "$SESSION_NAME" 2>/dev/null
+" "$PATTERNS_FILE" "$IDX" "$NEW_COUNT" "$TODAY" "$SESSION_NAME" "$CURRENT_VERSION" "$CURRENT_MAJOR" 2>/dev/null
 
     UPDATED=$((UPDATED + 1))
 
@@ -204,6 +221,7 @@ project_type = sys.argv[4]
 failure_type = sys.argv[5]
 session_name = sys.argv[6]
 today = sys.argv[7]
+version = sys.argv[8]
 description = sys.stdin.read()
 
 with open(patterns_file) as f:
@@ -224,12 +242,14 @@ patterns.append({
     'occurrence_count': 1,
     'promoted_to_knowledge': False,
     'first_seen': today,
-    'last_seen': today
+    'last_seen': today,
+    'last_seen_version': version,
+    'stale': False
 })
 data['patterns'] = patterns
 with open(patterns_file, 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-" "$PATTERNS_FILE" "$PAT_ID" "$CATEGORY" "$PROJECT_TYPE" "$FAILURE_TYPE" "$SESSION_NAME" "$TODAY" 2>/dev/null
+" "$PATTERNS_FILE" "$PAT_ID" "$CATEGORY" "$PROJECT_TYPE" "$FAILURE_TYPE" "$SESSION_NAME" "$TODAY" "$CURRENT_VERSION" 2>/dev/null
 
     ADDED=$((ADDED + 1))
   fi

@@ -1810,30 +1810,30 @@ fi
 rm -rf "$QUERY_TMPDIR"
 
 # ─────────────────────────────────────────────────
-# Version 5.0.0 Consistency (TEST-13)
+# Version 6.0.0 Consistency (TEST-13)
 # ─────────────────────────────────────────────────
 echo ""
-echo "=== Version 5.0.0 ==="
+echo "=== Version 6.0.0 ==="
 
-V5_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
-V5_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+V6_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
+V6_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 
-if [[ "$V5_PLUGIN" == "5.0.0" ]]; then
-  pass "v5-plugin-json-version: plugin.json version is 5.0.0"
+if [[ "$V6_PLUGIN" == "6.0.0" ]]; then
+  pass "v6-plugin-json-version: plugin.json version is 6.0.0"
 else
-  fail "v5-plugin-json-version: plugin.json version is NOT 5.0.0 (got: $V5_PLUGIN)"
+  fail "v6-plugin-json-version: plugin.json version is NOT 6.0.0 (got: $V6_PLUGIN)"
 fi
 
-if [[ "$V5_CHANGELOG" == "5.0.0" ]]; then
-  pass "v5-changelog-first-entry: CHANGELOG first entry is 5.0.0"
+if [[ "$V6_CHANGELOG" == "6.0.0" ]]; then
+  pass "v6-changelog-first-entry: CHANGELOG first entry is 6.0.0"
 else
-  fail "v5-changelog-first-entry: CHANGELOG first entry is NOT 5.0.0 (got: $V5_CHANGELOG)"
+  fail "v6-changelog-first-entry: CHANGELOG first entry is NOT 6.0.0 (got: $V6_CHANGELOG)"
 fi
 
-if [[ "$V5_PLUGIN" == "$V5_CHANGELOG" ]]; then
-  pass "v5-version-consistency: plugin.json version matches CHANGELOG first entry"
+if [[ "$V6_PLUGIN" == "$V6_CHANGELOG" ]]; then
+  pass "v6-version-consistency: plugin.json version matches CHANGELOG first entry"
 else
-  fail "v5-version-consistency: plugin.json ($V5_PLUGIN) does NOT match CHANGELOG ($V5_CHANGELOG)"
+  fail "v6-version-consistency: plugin.json ($V6_PLUGIN) does NOT match CHANGELOG ($V6_CHANGELOG)"
 fi
 
 # ─────────────────────────────────────────────────
@@ -2321,6 +2321,395 @@ if grep -q '| File |' commands/buidl.md && grep -q '| Agent |' commands/buidl.md
   pass "v5-findings-ledger-file-agent-cols: findings ledger table has File and Agent columns"
 else
   fail "v5-findings-ledger-file-agent-cols: findings ledger table MISSING File or Agent columns"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-1: load-knowledge.sh exists and is valid
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Dynamic Knowledge Loading ==="
+
+if [[ -f scripts/load-knowledge.sh ]]; then
+  pass "v6-knowledge-exists: load-knowledge.sh exists"
+else
+  fail "v6-knowledge-exists: load-knowledge.sh MISSING"
+fi
+
+check "v6-knowledge-syntax: load-knowledge.sh passes bash -n" bash -n scripts/load-knowledge.sh
+
+if [[ -x scripts/load-knowledge.sh ]]; then
+  pass "v6-knowledge-executable: load-knowledge.sh is executable"
+else
+  fail "v6-knowledge-executable: load-knowledge.sh is NOT executable"
+fi
+
+if grep -q 'set -euo pipefail' scripts/load-knowledge.sh; then
+  pass "v6-knowledge-pipefail: load-knowledge.sh has set -euo pipefail"
+else
+  fail "v6-knowledge-pipefail: load-knowledge.sh MISSING set -euo pipefail"
+fi
+
+if grep -q 'SCRIPT_DIR' scripts/load-knowledge.sh; then
+  pass "v6-knowledge-scriptdir: load-knowledge.sh has SCRIPT_DIR"
+else
+  fail "v6-knowledge-scriptdir: load-knowledge.sh MISSING SCRIPT_DIR"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-2: load-knowledge.sh functional test — line cap
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Dynamic Knowledge Line Cap ==="
+
+LK_LINES=$(bash scripts/load-knowledge.sh opnet-frontend-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$LK_LINES" -le 400 ]]; then
+  pass "v6-knowledge-linecap: opnet-frontend-dev output is $LK_LINES lines (<=400)"
+else
+  fail "v6-knowledge-linecap: opnet-frontend-dev output is $LK_LINES lines (>400)"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-3: load-knowledge.sh outputs relevant content
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Dynamic Knowledge Relevance ==="
+
+LK_OUTPUT=$(bash scripts/load-knowledge.sh opnet-frontend-dev op20-token 2>/dev/null || true)
+if echo "$LK_OUTPUT" | grep -qi 'frontend\|react\|vite'; then
+  pass "v6-knowledge-relevance: frontend-dev output contains frontend-relevant content"
+else
+  fail "v6-knowledge-relevance: frontend-dev output does NOT contain frontend-relevant content"
+fi
+
+# Contract-dev should get full bible (more sections)
+LK_CONTRACT_LINES=$(bash scripts/load-knowledge.sh opnet-contract-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$LK_CONTRACT_LINES" -le 400 ]]; then
+  pass "v6-knowledge-contract-cap: contract-dev output is $LK_CONTRACT_LINES lines (<=400)"
+else
+  fail "v6-knowledge-contract-cap: contract-dev output is $LK_CONTRACT_LINES lines (>400)"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-4: Bible sections tagged
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Bible Section Tags ==="
+
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if grep -q "BEGIN-SECTION-$i " knowledge/opnet-bible.md; then
+    pass "v6-bible-tag-begin-$i: BEGIN-SECTION-$i tag exists"
+  else
+    fail "v6-bible-tag-begin-$i: BEGIN-SECTION-$i tag MISSING"
+  fi
+  if grep -q "END-SECTION-$i" knowledge/opnet-bible.md; then
+    pass "v6-bible-tag-end-$i: END-SECTION-$i tag exists"
+  else
+    fail "v6-bible-tag-end-$i: END-SECTION-$i tag MISSING"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-5: Agent files reference load-knowledge.sh
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Agent Knowledge References ==="
+
+for agent in opnet-backend-dev opnet-frontend-dev opnet-contract-dev opnet-auditor opnet-deployer opnet-e2e-tester opnet-ui-tester cross-layer-validator loop-builder; do
+  if grep -q 'load-knowledge.sh' "agents/$agent.md"; then
+    pass "v6-agent-ref-$agent: $agent references load-knowledge.sh"
+  else
+    fail "v6-agent-ref-$agent: $agent does NOT reference load-knowledge.sh"
+  fi
+done
+
+# Verify slice names remain visible (for orphan detection test at line 247)
+for agent in opnet-backend-dev opnet-frontend-dev opnet-contract-dev opnet-auditor opnet-deployer opnet-e2e-tester opnet-ui-tester; do
+  if grep -q 'knowledge/slices\|\.md.*slice' "agents/$agent.md"; then
+    pass "v6-slice-visible-$agent: $agent still has slice name visible"
+  else
+    fail "v6-slice-visible-$agent: $agent lost slice name visibility"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# v6-knowledge-6: buidl.md dispatch uses load-knowledge.sh
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Buidl.md Dispatch Updates ==="
+
+if grep -q 'load-knowledge.sh' commands/buidl.md; then
+  pass "v6-buidl-dispatch: buidl.md references load-knowledge.sh"
+else
+  fail "v6-buidl-dispatch: buidl.md does NOT reference load-knowledge.sh"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-fuzz-1: fuzz-contract.sh exists and is valid
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Property-Based Fuzzer ==="
+
+if [[ -f scripts/fuzz-contract.sh ]]; then
+  pass "v6-fuzz-exists: fuzz-contract.sh exists"
+else
+  fail "v6-fuzz-exists: fuzz-contract.sh MISSING"
+fi
+
+check "v6-fuzz-syntax: fuzz-contract.sh passes bash -n" bash -n scripts/fuzz-contract.sh
+
+if [[ -x scripts/fuzz-contract.sh ]]; then
+  pass "v6-fuzz-executable: fuzz-contract.sh is executable"
+else
+  fail "v6-fuzz-executable: fuzz-contract.sh is NOT executable"
+fi
+
+if grep -q 'set -euo pipefail' scripts/fuzz-contract.sh; then
+  pass "v6-fuzz-pipefail: fuzz-contract.sh has set -euo pipefail"
+else
+  fail "v6-fuzz-pipefail: fuzz-contract.sh MISSING set -euo pipefail"
+fi
+
+if grep -q 'SCRIPT_DIR' scripts/fuzz-contract.sh; then
+  pass "v6-fuzz-scriptdir: fuzz-contract.sh has SCRIPT_DIR"
+else
+  fail "v6-fuzz-scriptdir: fuzz-contract.sh MISSING SCRIPT_DIR"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-fuzz-2: fuzz-contract.sh functional test
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Fuzzer Functional ==="
+
+FUZZ_TMPDIR=$(mktemp -d)
+cat > "$FUZZ_TMPDIR/test-abi.json" << 'ABIEOF'
+[
+  {
+    "name": "transfer",
+    "type": "function",
+    "inputs": [
+      {"name": "to", "type": "address"},
+      {"name": "amount", "type": "u256"}
+    ]
+  },
+  {
+    "name": "approve",
+    "type": "function",
+    "inputs": [
+      {"name": "spender", "type": "address"},
+      {"name": "amount", "type": "u256"}
+    ]
+  }
+]
+ABIEOF
+
+if FUZZ_OUTPUT_DIR="$FUZZ_TMPDIR" bash scripts/fuzz-contract.sh "$FUZZ_TMPDIR/test-abi.json" >/dev/null 2>&1; then
+  pass "v6-fuzz-runs: fuzz-contract.sh runs without error"
+else
+  fail "v6-fuzz-runs: fuzz-contract.sh failed to run"
+fi
+
+if [[ -f "$FUZZ_TMPDIR/fuzz-cases.json" ]]; then
+  FUZZ_COUNT=$(python3 -c "import json; print(len(json.load(open('$FUZZ_TMPDIR/fuzz-cases.json'))))" 2>/dev/null || echo "0")
+  if [[ "$FUZZ_COUNT" -ge 5 ]]; then
+    pass "v6-fuzz-count: generated $FUZZ_COUNT fuzz cases (>=5)"
+  else
+    fail "v6-fuzz-count: generated only $FUZZ_COUNT fuzz cases (<5)"
+  fi
+
+  # Verify JSON structure has required fields
+  if python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    cases = json.load(f)
+assert isinstance(cases, list), 'not a list'
+for c in cases[:3]:
+    assert 'method' in c, 'missing method field'
+    assert 'params' in c, 'missing params field'
+    assert 'expected_revert' in c, 'missing expected_revert field'
+    assert isinstance(c['expected_revert'], bool), 'expected_revert is not boolean'
+" "$FUZZ_TMPDIR/fuzz-cases.json" 2>&1; then
+    pass "v6-fuzz-schema: fuzz-cases.json has correct schema (method, params, expected_revert)"
+  else
+    fail "v6-fuzz-schema: fuzz-cases.json has incorrect schema"
+  fi
+else
+  fail "v6-fuzz-output: fuzz-cases.json was NOT created"
+fi
+
+# Verify no transaction sending code
+if grep -qi 'sendTransaction\|broadcast' scripts/fuzz-contract.sh; then
+  fail "v6-fuzz-no-send: fuzz-contract.sh contains transaction sending code"
+else
+  pass "v6-fuzz-no-send: fuzz-contract.sh does NOT send transactions"
+fi
+
+rm -rf "$FUZZ_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# v6-fuzz-3: Adversarial agents reference fuzz-cases.json
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Fuzzer Agent References ==="
+
+if grep -q 'fuzz-cases.json' agents/opnet-adversarial-auditor.md; then
+  pass "v6-fuzz-adversarial-auditor: adversarial-auditor references fuzz-cases.json"
+else
+  fail "v6-fuzz-adversarial-auditor: adversarial-auditor does NOT reference fuzz-cases.json"
+fi
+
+if grep -q 'fuzz-cases.json' agents/opnet-adversarial-tester.md; then
+  pass "v6-fuzz-adversarial-tester: adversarial-tester references fuzz-cases.json"
+else
+  fail "v6-fuzz-adversarial-tester: adversarial-tester does NOT reference fuzz-cases.json"
+fi
+
+if grep -q 'fuzz-contract.sh' commands/buidl.md; then
+  pass "v6-fuzz-buidl-ref: buidl.md references fuzz-contract.sh"
+else
+  fail "v6-fuzz-buidl-ref: buidl.md does NOT reference fuzz-contract.sh"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-prune-1: update-scores.sh has --prune flag
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Stale Pattern Pruning ==="
+
+if grep -q '\-\-prune' scripts/update-scores.sh; then
+  pass "v6-prune-flag: update-scores.sh has --prune flag"
+else
+  fail "v6-prune-flag: update-scores.sh does NOT have --prune flag"
+fi
+
+if grep -q 'PRUNE_MODE' scripts/update-scores.sh; then
+  pass "v6-prune-mode: update-scores.sh has PRUNE_MODE variable"
+else
+  fail "v6-prune-mode: update-scores.sh MISSING PRUNE_MODE variable"
+fi
+
+if grep -q 'prune-log' scripts/update-scores.sh; then
+  pass "v6-prune-log-ref: update-scores.sh references prune-log"
+else
+  fail "v6-prune-log-ref: update-scores.sh does NOT reference prune-log"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-prune-2: extract-patterns.sh has version fields
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Pattern Version Tracking ==="
+
+if grep -q 'last_seen_version' scripts/extract-patterns.sh; then
+  pass "v6-version-field: extract-patterns.sh has last_seen_version field"
+else
+  fail "v6-version-field: extract-patterns.sh MISSING last_seen_version field"
+fi
+
+if grep -q 'stale' scripts/extract-patterns.sh; then
+  pass "v6-stale-field: extract-patterns.sh has stale field"
+else
+  fail "v6-stale-field: extract-patterns.sh MISSING stale field"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-audit-1: audit-learning.sh exists and runs
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Learning Audit Script ==="
+
+if [[ -f scripts/audit-learning.sh ]]; then
+  pass "v6-audit-exists: audit-learning.sh exists"
+else
+  fail "v6-audit-exists: audit-learning.sh MISSING"
+fi
+
+check "v6-audit-syntax: audit-learning.sh passes bash -n" bash -n scripts/audit-learning.sh
+
+if [[ -x scripts/audit-learning.sh ]]; then
+  pass "v6-audit-executable: audit-learning.sh is executable"
+else
+  fail "v6-audit-executable: audit-learning.sh is NOT executable"
+fi
+
+AUDIT_OUTPUT=$(bash scripts/audit-learning.sh 2>/dev/null || true)
+if echo "$AUDIT_OUTPUT" | grep -q 'Learning System Health Report'; then
+  pass "v6-audit-runs: audit-learning.sh produces health report"
+else
+  fail "v6-audit-runs: audit-learning.sh did NOT produce health report"
+fi
+
+if echo "$AUDIT_OUTPUT" | grep -q 'Patterns'; then
+  pass "v6-audit-patterns: audit-learning.sh reports on patterns"
+else
+  fail "v6-audit-patterns: audit-learning.sh does NOT report on patterns"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-cmd-1: buidl-learning.md command exists
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== buidl-learning Command ==="
+
+if [[ -f commands/buidl-learning.md ]]; then
+  pass "v6-cmd-learning-exists: buidl-learning.md exists"
+else
+  fail "v6-cmd-learning-exists: buidl-learning.md MISSING"
+fi
+
+if grep -q 'description:' commands/buidl-learning.md; then
+  pass "v6-cmd-learning-frontmatter: buidl-learning.md has description frontmatter"
+else
+  fail "v6-cmd-learning-frontmatter: buidl-learning.md MISSING description frontmatter"
+fi
+
+if grep -q 'audit-learning.sh' commands/buidl-learning.md; then
+  pass "v6-cmd-learning-script-ref: buidl-learning.md references audit-learning.sh"
+else
+  fail "v6-cmd-learning-script-ref: buidl-learning.md does NOT reference audit-learning.sh"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-status-1: buidl-status.md has learning health
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== buidl-status Learning Health ==="
+
+if grep -q 'Learning' commands/buidl-status.md; then
+  pass "v6-status-learning: buidl-status.md has Learning health section"
+else
+  fail "v6-status-learning: buidl-status.md MISSING Learning health section"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-version-1: Version 6.0.0 consistency
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== v6 Version Consistency ==="
+
+V6_README=$(grep -c '6\.0\.0' README.md || true)
+if [[ "$V6_README" -ge 1 ]]; then
+  pass "v6-readme-version: README.md references 6.0.0"
+else
+  fail "v6-readme-version: README.md does NOT reference 6.0.0"
+fi
+
+if grep -q 'buidl-learning' README.md; then
+  pass "v6-readme-learning-cmd: README.md documents buidl-learning command"
+else
+  fail "v6-readme-learning-cmd: README.md does NOT document buidl-learning command"
+fi
+
+if grep -q 'fuzz-contract' README.md; then
+  pass "v6-readme-fuzz: README.md documents fuzz-contract.sh"
+else
+  fail "v6-readme-fuzz: README.md does NOT document fuzz-contract.sh"
+fi
+
+if grep -q 'Dynamic Knowledge' README.md; then
+  pass "v6-readme-dynamic: README.md documents Dynamic Knowledge"
+else
+  fail "v6-readme-dynamic: README.md does NOT document Dynamic Knowledge"
 fi
 
 # ─────────────────────────────────────────────────

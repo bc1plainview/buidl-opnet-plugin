@@ -68,6 +68,7 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `/buidl-resume` | Resume an interrupted loop from last checkpoint |
 | `/buidl-clean` | Cancel + remove worktree and branch |
 | `/buidl-trace` | Show agent execution trace timeline for the current session |
+| `/buidl-learning` | Show learning system health report (patterns, scores, profiles) |
 
 ### Flags
 
@@ -136,6 +137,12 @@ Every reviewer finding is assigned a unique ID and tracked in a structured ledge
 #### Incremental Audit
 On cycle 2+, the auditor receives a `git diff` of changes since the last audit plus previous findings, instead of re-scanning the entire codebase. It focuses on the diff, checks blast radius of changes, and verifies previous findings are resolved. Cuts audit time significantly on fix cycles.
 
+#### Dynamic Knowledge Loading
+Agents no longer load the full 2000-line bible regardless of role. `scripts/load-knowledge.sh` assembles role-specific knowledge payloads: the agent's domain slice, troubleshooting guide, tagged bible sections matching the agent's role ([CONTRACT], [FRONTEND], [BACKEND], [SECURITY], [DEPLOYMENT]), and non-stale learned patterns. Output is capped at 400 lines. Contract-dev and loop-builder get the full bible; frontend-dev gets only [FRONTEND] sections; auditors get only [SECURITY] sections.
+
+#### Property-Based Fuzz Testing
+`scripts/fuzz-contract.sh` reads a contract ABI, extracts method signatures and parameter types, and generates boundary test cases: u256 values [0, 1, 2^128, 2^256-1, 2^256-2], address values [zero, contract, caller], bool values [true, false]. Produces all single-param boundary combinations plus 10 random combinations per method. Output goes to `artifacts/testing/fuzz-cases.json` and feeds into both the adversarial auditor and adversarial E2E tester. Does not send transactions.
+
 #### Dynamic Re-Planning
 When an agent fails after retry, the orchestrator queries `learning/patterns.yaml` for known fix patterns matching the failure category. If a match is found, it presents a 5th option ("Apply known fix: [description]") alongside the standard 4 error-handling options. Lessons from past sessions are applied automatically instead of requiring manual intervention.
 
@@ -150,7 +157,7 @@ The `--dry-run` flag runs Challenge, Specify, and Explore phases normally, then 
 The plugin learns from every session and gets smarter over time. Three systems work together to turn past experience into better future performance.
 
 #### Pattern Store (`learning/patterns.yaml`)
-Anti-patterns and failures from retrospectives are extracted into a structured YAML store. Deduplicated by description similarity, with occurrence counts tracked across sessions. Patterns with 3+ occurrences auto-promote to relevant knowledge slices with `[LEARNED]` tags. Grep-queryable by category, tech stack, and failure type.
+Anti-patterns and failures from retrospectives are extracted into a structured YAML store. Deduplicated by description similarity, with occurrence counts tracked across sessions. Patterns with 3+ occurrences auto-promote to relevant knowledge slices with `[LEARNED]` tags. Grep-queryable by category, tech stack, and failure type. Patterns track `last_seen_version` and are flagged `stale: true` when 2+ major versions behind. The `--prune` flag on `update-scores.sh` removes agent entries with >30 sessions or success_rate <0.2 with 10+ data points, logging to `learning/prune-log.yaml`. Run `/buidl-learning` to see a health report.
 
 #### Agent Performance Scoring (`learning/agent-scores.yaml`)
 Rolling averages for success rate, cycles to pass, and tokens consumed — tracked per agent and per model (opus vs sonnet). Per-agent strengths and weaknesses tracked by finding category. Scores require 5+ data points before surfacing. The orchestrator consults scores to make smarter routing and dispatch decisions.
@@ -310,9 +317,9 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v5.0.0)
+|   +-- plugin.json              # Plugin manifest (v6.0.0)
 +-- agents/                      # 14 agent definitions (incl. adversarial auditor + tester)
-+-- commands/                    # 9 slash commands (incl. buidl-trace)
++-- commands/                    # 10 slash commands (incl. buidl-trace, buidl-learning)
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
@@ -321,7 +328,7 @@ buidl/
 |   +-- patterns.yaml            # Structured pattern store (auto-updated)
 |   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
 |   +-- profiles/                # Auto-generated project-type profiles
-+-- scripts/                     # Setup + state writer + learning + routing + tracing scripts
++-- scripts/                     # Setup + state writer + learning + routing + tracing + fuzz + knowledge scripts
 +-- skills/                      # 3 triggerable skills
 |   +-- audit-from-bugs/
 |   +-- loop-guide/
@@ -337,13 +344,16 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-419 tests across 50 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
+434+ tests across 53 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
 
 Tests run automatically on every push and PR via GitHub Actions.
 
 ---
 
 ## Version History
+
+### v6.0.0 — Dynamic Knowledge (2026-03-13)
+Three knowledge and learning system improvements: **Dynamic knowledge slice loading** assembles role-specific knowledge payloads per agent, filtering the 2000-line bible to only role-relevant sections and keeping payloads under 400 lines. **Property-based fuzz case generation** creates structured boundary test cases from ABI signatures for adversarial auditing. **Stale pattern pruning** with version-based staleness tracking and a `/buidl-learning` health report.
 
 ### v5.0.0 — Audit Hardening (2026-03-13)
 Nine correctness, reliability, and coverage fixes from an external audit: **acceptance test locking** prevents builders from modifying verification criteria. **ABI-lock checkpoint** prevents frontend/backend drift. **Adversarial auditing** tests invariants with attack sequences. **Adversarial E2E testing** sends real edge-case transactions. **Failure diagnosis** classifies root causes when cycles are exhausted. **Findings ledger** tracks resolution and detects regressions. **Chain probe** fetches live gas parameters. **Cross-agent critique** replaces self-critique with independent verification. **Hard gate enforcement** ensures critical gates cannot be skipped.

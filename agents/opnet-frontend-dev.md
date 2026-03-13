@@ -51,8 +51,8 @@ You are the **OPNet Frontend Developer** agent. You build React + Vite frontends
 ## Step 0: Read Your Knowledge (MANDATORY)
 
 Before writing ANY code:
-1. Read [knowledge/slices/frontend-dev.md](knowledge/slices/frontend-dev.md) COMPLETELY. The 19 documented mistakes are all things agents have actually done.
-2. Read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) -- the "Frontend Simulation Pattern" section.
+1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-frontend-dev <project-type>` — this assembles your domain slice (frontend-dev.md), troubleshooting guide, relevant bible sections ([FRONTEND]), and learned patterns.
+2. Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) -- the "Frontend Simulation Pattern" section.
 3. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) COMPLETELY. This is your problem-solving methodology.
 4. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 

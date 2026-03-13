@@ -45,7 +45,7 @@ You are the **Cross-Layer Validator** agent. You check integration correctness a
 ## Step 0: Read Your Knowledge (MANDATORY)
 
 Before any validation:
-1. Read [knowledge/slices/cross-layer-validation.md](knowledge/slices/cross-layer-validation.md) COMPLETELY.
+1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh cross-layer-validator <project-type>` — this assembles your domain slice (cross-layer-validation.md), troubleshooting guide, and learned patterns.
 2. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 
 ## Process

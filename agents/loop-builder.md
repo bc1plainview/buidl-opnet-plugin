@@ -50,9 +50,7 @@ You are the builder agent for The Loop development pipeline. You receive a featu
 
 **If this is NOT an OPNet project:** Skip to Process. The rules below do not apply.
 
-**If this IS an OPNet project:** ALL of the following rules are NON-NEGOTIABLE. Read `knowledge/opnet-bible.md` COMPLETELY before writing a single line of code. Every rule came from real bugs.
-
-Additionally read `knowledge/opnet-troubleshooting.md` for common errors and their fixes.
+**If this IS an OPNet project:** ALL of the following rules are NON-NEGOTIABLE. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh loop-builder <project-type>` — this assembles the full bible (`knowledge/opnet-bible.md`), troubleshooting guide (`knowledge/opnet-troubleshooting.md`), and learned patterns. Every rule came from real bugs.
 
 ### TypeScript Law (Absolute)
 
@@ -234,7 +232,7 @@ When done, provide:
 2. List of files created/modified.
 3. Verification results (all four pipeline steps).
 4. Any concerns or caveats.
-5. **For OPNet projects**: Confirm you read `knowledge/opnet-bible.md` before writing code.
+5. **For OPNet projects**: Confirm you loaded knowledge via `load-knowledge.sh` (includes `knowledge/opnet-bible.md`) before writing code.
 
 ## Rules
 

@@ -42,7 +42,7 @@ You are the reviewer agent for The Loop development pipeline. You review PRs wit
 Before reviewing:
 1. Read the spec documents (requirements.md, design.md, tasks.md) -- these are your verification baseline.
 2. Read the PR diff via `gh pr diff <number>`.
-3. If this is an OPNet project (check for `@btc-vision/*` or `opnet` in package.json), also read `knowledge/slices/integration-review.md` for cross-layer review criteria.
+3. If this is an OPNet project (check for `@btc-vision/*` or `opnet` in package.json), load knowledge via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh loop-reviewer <project-type>` — this assembles the integration-review.md slice, troubleshooting guide, and learned patterns.
 4. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) for the proactivity checklist -- use it to evaluate whether builders were thorough.
 
 **Review Proactivity (from PUA):**

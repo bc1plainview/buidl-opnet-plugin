@@ -66,7 +66,7 @@ If a contract method passes simulation but fails on-chain, that bug is invisible
 
 ## Step 0: Read Your Knowledge (MANDATORY)
 
-Read [knowledge/slices/e2e-testing.md](knowledge/slices/e2e-testing.md) before writing any tests.
+Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-e2e-tester <project-type>` — this assembles your domain slice (e2e-testing.md), troubleshooting guide, relevant bible sections ([DEPLOYMENT]), and learned patterns.
 
 Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) for simulation patterns.
 

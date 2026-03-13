@@ -598,7 +598,8 @@ You are working in: [WORKTREE_PATH]
 - Deployment receipt: [path to receipt.json, if deployer completed]
 
 ## Knowledge
-Read your knowledge file FIRST: ${CLAUDE_PLUGIN_ROOT}/knowledge/slices/[agent-slice].md
+Load your knowledge payload FIRST: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh [agent-name] [project-type]`
+This assembles your domain slice from knowledge/slices/[agent-slice].md, troubleshooting guide, relevant bible sections, and learned patterns.
 
 ## Problem-Solving Discipline
 Read the PUA methodology: ${CLAUDE_PLUGIN_ROOT}/skills/pua/SKILL.md — this governs your debugging, escalation, and proactivity standards.
@@ -655,7 +656,7 @@ Critique dispatch:
 #### Step 2a: Contract Development (if components.contract = true)
 
 Launch `opnet-contract-dev` agent:
-- Knowledge: `knowledge/slices/contract-dev.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-contract-dev <project-type>` (loads contract-dev.md slice + bible + troubleshooting + patterns)
 - Working directory: `[WORKTREE]/contracts/` or `[WORKTREE]/src/`
 - Output: ABI JSON to `artifacts/contract/abi.json`, build result to `artifacts/contract/build-result.json`
 
@@ -704,13 +705,13 @@ Before dispatching frontend or backend agents, verify the ABI has not been modif
 #### Step 2b: Frontend + Backend Development (parallel, after ABI ready)
 
 **Frontend** — Launch `opnet-frontend-dev` agent:
-- Knowledge: `knowledge/slices/frontend-dev.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-frontend-dev <project-type>` (loads frontend-dev.md slice + bible + troubleshooting + patterns)
 - Import: ABI from `artifacts/contract/abi.json`
 - Working directory: `[WORKTREE]/frontend/`
 - Output: `artifacts/frontend/build-result.json`
 
 **Backend** (if components.backend = true) — Launch `opnet-backend-dev` agent in parallel:
-- Knowledge: `knowledge/slices/backend-dev.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-backend-dev <project-type>` (loads backend-dev.md slice + bible + troubleshooting + patterns)
 - Import: ABI from `artifacts/contract/abi.json`
 - Working directory: `[WORKTREE]/backend/`
 - Output: `artifacts/backend/build-result.json`
@@ -750,7 +751,7 @@ If the same agent pair has already been re-dispatched twice, defer to the audito
 Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=validating status=validating`
 
 Launch `cross-layer-validator` agent:
-- Knowledge: `knowledge/slices/cross-layer-validation.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh cross-layer-validator <project-type>` (loads cross-layer-validation.md slice + troubleshooting + patterns)
 - Import: ABI from `artifacts/contract/abi.json`
 - Scope: ALL frontend and backend source files
 - Output: `artifacts/validation/cross-layer-report.md`
@@ -775,7 +776,7 @@ This step catches ABI mismatches, wrong method names, parameter type errors, con
 **Full Audit (cycle 1):** Standard full-codebase audit.
 
 Launch `opnet-auditor` agent:
-- Knowledge: `knowledge/slices/security-audit.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-auditor <project-type>` (loads security-audit.md slice + bible + troubleshooting + patterns)
 - Scope: ALL source files across all components (cycle 1) or diff + blast radius (cycle 2+)
 - Import: Cross-layer validation report from `artifacts/validation/cross-layer-report.md` (if available -- pass WARNING findings as additional context)
 - Import (cycle 2+): `git diff` output and previous `artifacts/audit/findings.md`
@@ -796,10 +797,17 @@ Launch `opnet-auditor` agent:
 
 Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=adversarial_auditing status=adversarial_auditing`
 
+**Fuzz Case Generation:** Before dispatching the adversarial auditor, generate boundary test cases:
+```
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/fuzz-contract.sh artifacts/contract/abi.json
+```
+This creates `artifacts/testing/fuzz-cases.json` with systematic boundary values for every method parameter.
+
 Launch `opnet-adversarial-auditor` agent:
 - Knowledge: Contract ABI from `artifacts/contract/abi.json`
 - Import: Spec documents from `spec/` directory (for invariant extraction)
 - Import: Contract source files
+- Import: Fuzz cases from `artifacts/testing/fuzz-cases.json` (if generated)
 - Output: `artifacts/audit/adversarial-findings.md`
 - `max_turns: 20`
 
@@ -826,7 +834,7 @@ For mainnet, present AskUserQuestion:
 - Options: "Deploy to mainnet", "Deploy to testnet only", "Skip deployment"
 
 Launch `opnet-deployer` agent:
-- Knowledge: `knowledge/slices/deployment.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-deployer <project-type>` (loads deployment.md slice + bible + troubleshooting + patterns)
 - Import: Compiled WASM from contract build
 - Network: testnet (or mainnet if approved)
 - Output: `artifacts/deployment/receipt.json`
@@ -853,7 +861,7 @@ Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=e
 If the handoff file is missing, read `receipt.json` directly and construct the E2E tester prompt manually. **Do NOT skip E2E testing because the handoff file is missing.**
 
 Launch `opnet-e2e-tester` agent:
-- Knowledge: `knowledge/slices/e2e-testing.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-e2e-tester <project-type>` (loads e2e-testing.md slice + bible + troubleshooting + patterns)
 - Import: Deployed contract address from `artifacts/deployment/e2e-handoff.json` (or `receipt.json`)
 - Import: Contract ABI from `artifacts/contract/abi.json`
 - Import: Spec documents (requirements.md, tasks.md) for expected behavior
@@ -891,7 +899,7 @@ The E2E tester:
 Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=adversarial_testing status=adversarial_testing`
 
 Launch `opnet-adversarial-tester` agent:
-- Knowledge: `knowledge/slices/e2e-testing.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-e2e-tester <project-type>` (loads e2e-testing.md slice + bible + troubleshooting + patterns)
 - Import: Contract ABI from `artifacts/contract/abi.json`
 - Import: Deployed contract address from `artifacts/deployment/receipt.json`
 - Import: Spec documents for expected behavior
@@ -915,7 +923,7 @@ The adversarial E2E tester sends REAL transactions targeting:
 #### Step 2f: UI Testing (after on-chain E2E passes)
 
 Launch `opnet-ui-tester` agent:
-- Knowledge: `knowledge/slices/ui-testing.md`
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-ui-tester <project-type>` (loads ui-testing.md slice + troubleshooting + patterns)
 - Import: Deployed contract address from `artifacts/deployment/receipt.json`
 - Import: Frontend dev server port from `artifacts/frontend/build-result.json`
 - Output: `artifacts/testing/ui-results.json`, `artifacts/testing/screenshots/`

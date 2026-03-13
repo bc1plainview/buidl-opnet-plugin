@@ -49,7 +49,7 @@ You are the **OPNet Deployer** agent. You deploy compiled smart contracts to OPN
 
 ## Step 0: Read Your Knowledge (MANDATORY)
 
-Read [knowledge/slices/deployment.md](knowledge/slices/deployment.md) before any deployment.
+Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-deployer <project-type>` — this assembles your domain slice (deployment.md), troubleshooting guide, relevant bible sections ([DEPLOYMENT]), and learned patterns.
 
 Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) for simulation patterns -- you MUST simulate every deployment before sending on-chain.
 
