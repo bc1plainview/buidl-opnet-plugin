@@ -61,11 +61,6 @@ Write the hypothesis to `artifacts/optimize/cycle-<N>-hypothesis.md`.
 
 Make the minimal code change to test the hypothesis. Keep changes small and reversible.
 
-Before making changes, create a restore point:
-```bash
-git stash push -m "optimize-cycle-<N>-baseline"
-```
-
 ### 3. Benchmark
 
 1. Run the full test suite. If any test fails, REVERT immediately and try a different hypothesis.
@@ -87,7 +82,7 @@ git stash push -m "optimize-cycle-<N>-baseline"
 ### 4. Keep or Revert
 
 - If the metric improved AND all tests pass: KEEP the change. Update the running best.
-- If the metric worsened OR any test failed: REVERT via `git stash pop`.
+- If the metric worsened OR any test failed: REVERT via `git checkout -- .` to discard all uncommitted changes.
 - If the metric is unchanged: REVERT (no point keeping neutral changes).
 
 ### 5. Check Target

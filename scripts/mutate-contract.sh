@@ -46,7 +46,13 @@ mkdir -p "$OUTPUT_DIR"
 
 # Working directory for mutants
 MUTANT_DIR=$(mktemp -d)
-trap 'rm -rf "$MUTANT_DIR"' EXIT
+cleanup() {
+  if [[ -n "${SOURCE_CONTENT:-}" && -n "${CONTRACT_SRC:-}" && -f "$CONTRACT_SRC" ]]; then
+    echo "$SOURCE_CONTENT" > "$CONTRACT_SRC"
+  fi
+  rm -rf "$MUTANT_DIR"
+}
+trap cleanup EXIT
 
 # Contract directory (for build context)
 CONTRACT_DIR="$(dirname "$CONTRACT_SRC")"
@@ -69,7 +75,7 @@ OPERATORS=(
   "compare-neq-to-eq|s/!=/==/g"
   "compare-gt-to-lt|s/> /< /g"
   "compare-lt-to-gt|s/< /> /g"
-  "compare-gte-to-lte|s/>=/<=/"
+  "compare-gte-to-lte|s/>=/<=/g"
   "compare-lte-to-gte|s/<=/>=/g"
   "bool-true-to-false|s/return true/return false/g"
   "bool-false-to-true|s/return false/return true/g"
@@ -135,7 +141,6 @@ survivors.append({
 print(json.dumps(survivors))
 " "$SURVIVORS_JSON" "$OP_NAME" "$CONTRACT_SRC")
       # Restore original
-      cp "$CONTRACT_SRC" "$CONTRACT_SRC" 2>/dev/null || true
       echo "$SOURCE_CONTENT" > "$CONTRACT_SRC"
       continue
     fi

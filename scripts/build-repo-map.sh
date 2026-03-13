@@ -60,11 +60,11 @@ if abi_path and os.path.exists(abi_path):
         # Handle both array format and object format
         abi_entries = abi_data if isinstance(abi_data, list) else abi_data.get('abi', abi_data.get('methods', []))
 
-        if isinstance(abi_entries, list):
-            methods_section = []
-            events_section = []
-            storage_section = []
+        methods_section = []
+        events_section = []
+        storage_section = []
 
+        if isinstance(abi_entries, list):
             for entry in abi_entries:
                 if not isinstance(entry, dict):
                     continue
