@@ -57,7 +57,7 @@ STATUS=$(grep '^status:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
 
 # Block during active phases
 case "$STATUS" in
-  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing)
+  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing|validating)
     echo '{"decision":"block","reason":"Direct writes to state files are blocked during active loops. Use write-state.sh instead: bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh key=value"}' >&2
     exit 2
     ;;

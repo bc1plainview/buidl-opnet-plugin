@@ -1,0 +1,18 @@
+# Pattern Store — Auto-extracted from session retrospectives
+# Schema:
+#   id: PAT-LNNN (L = learned, sequential)
+#   category: contract|frontend|backend|deployment|testing|orchestration
+#   tech_stack: [list of relevant technologies]
+#   failure_type: runtime_error|build_error|type_error|security|logic|config|process
+#   description: One-line description of the pattern
+#   fix: What to do about it
+#   source_sessions: [list of session names where this appeared]
+#   occurrence_count: N
+#   promoted_to_knowledge: true|false (auto-promoted when count >= 3)
+#   first_seen: YYYY-MM-DD
+#   last_seen: YYYY-MM-DD
+#
+# Managed by: scripts/extract-patterns.sh
+# Do not edit manually — patterns are auto-extracted from retrospectives.
+
+patterns: []

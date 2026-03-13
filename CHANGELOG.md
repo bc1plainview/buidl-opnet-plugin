@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.5.0] - 2026-03-13
+
+### Added
+- **Adaptive learning pattern store** (`learning/patterns.yaml`): Structured YAML store for patterns auto-extracted from session retrospectives. Patterns are categorized by domain (contract/frontend/backend/deployment/testing), failure type, and tech stack. Auto-deduplicates and tracks occurrence count across sessions.
+- **Pattern extraction script** (`scripts/extract-patterns.sh`): Reads a retrospective markdown file, extracts anti-patterns and failures, appends structured entries to patterns.yaml. Auto-promotes patterns with 3+ occurrences to relevant knowledge slices with `[LEARNED]` tag.
+- **Agent performance scoring** (`learning/agent-scores.yaml`): Rolling metrics per agent — sessions completed, success rate, average cycles to pass review, average tokens consumed, model history with per-model success rates. Updated automatically after each session.
+- **Score update script** (`scripts/update-scores.sh`): Reads session state.yaml after completion, extracts agent outcomes, computes rolling averages, updates agent-scores.yaml.
+- **Cross-layer validator agent** (`agents/cross-layer-validator.md`): READ-ONLY agent that validates integration correctness across contract/frontend/backend layers. Checks ABI-to-frontend method mapping, parameter types, contract address consistency, network config alignment, signer configuration, and event names. Runs after builders, before auditor.
+- **Cross-layer validation knowledge slice** (`knowledge/slices/cross-layer-validation.md`): 8 documented mismatch types with detection rules, fixes, and routing decisions. Validation checklist for frontend/backend contract calls.
+- **OP-20 starter template** (`templates/starters/op20-token/`): Complete starter for OP-20 token projects — AssemblyScript contract with parameterized name/symbol/supply, unit tests, OPNet-ready Vite frontend with WalletConnect scaffold, and template.yaml manifest with customization points.
+- **`validating` active phase**: Added to stop-hook, guard-state, and guard-state-bash so the loop stays blocked during cross-layer validation.
+
+### Changed
+- **Orchestrator Phase 4 Step 0** (`commands/buidl.md`): Learning consultation now has 4 sub-steps — (a) query pattern store filtered by project type, (b) check agent scores and suggest model upgrades for underperforming agents, (c) read retrospectives, (d) check starter templates for matching project type.
+- **Orchestrator Phase 4 Step 2b.5** (`commands/buidl.md`): New cross-layer validation step between builders and auditor. Dispatches cross-layer-validator, routes MISMATCH findings to responsible agents, passes WARNING findings to auditor.
+- **Orchestrator Phase 6** (`commands/buidl.md`): After retrospective, now calls extract-patterns.sh and update-scores.sh to update the adaptive learning system.
+- **Auditor dispatch** (`commands/buidl.md`): Now imports cross-layer validation report as additional context.
+- **Plugin version**: 3.4.0 -> 3.5.0
+
+### Why
+The plugin had a learning system that saved retrospectives but barely used them — the orchestrator read them as advisory text with no structure, no indexing, and no feedback loop into agent prompts. Agents kept repeating the same mistakes across sessions. The pattern store + agent scoring creates a real feedback loop: every session's lessons are extracted, scored, and injected into future agent prompts. Cross-layer validation catches the #1 source of wasted audit/E2E cycles (ABI mismatches) before they reach expensive downstream agents. Starter templates eliminate boilerplate for the most common project type (OP-20 tokens).
+
 ## [3.4.0] - 2026-03-13
 
 ### Added

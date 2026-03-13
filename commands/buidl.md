@@ -121,11 +121,34 @@ After every agent dispatch completes:
 
 ## Learning Consultation (Phase 4 Step 0)
 
-Before dispatching builders, scan `${CLAUDE_PLUGIN_ROOT}/learning/` for past retrospectives:
-1. List all `.md` files in the learning directory.
+Before dispatching builders, consult the adaptive learning system:
+
+### Step 0a: Pattern Store
+1. Read `${CLAUDE_PLUGIN_ROOT}/learning/patterns.yaml`.
+2. Filter patterns by: project type (opnet/generic), tech stack match, and category (contract/frontend/backend).
+3. For each matching pattern, include its `description` and `fix` in the relevant agent's dispatch prompt.
+4. Patterns with `promoted_to_knowledge: true` are already in knowledge slices — no need to duplicate.
+
+### Step 0b: Agent Performance Scores
+1. Read `${CLAUDE_PLUGIN_ROOT}/learning/agent-scores.yaml`.
+2. For each agent to be dispatched, check:
+   - If `sessions_completed >= 5`: include success rate and weakness areas in the dispatch prompt.
+   - If `success_rate < 0.5` and `sessions_completed >= 5`: suggest model upgrade to user ("frontend-dev has a 40% success rate on Sonnet — consider using `--builder-model opus`").
+3. Agent scores are informational — do not auto-switch models without user approval.
+
+### Step 0c: Retrospectives (existing)
+1. List all `.md` files in `${CLAUDE_PLUGIN_ROOT}/learning/` directory.
 2. If any exist, read their "What Worked" and "Anti-Patterns" sections.
 3. If a retrospective matches the current project type or tech stack, incorporate its lessons into agent prompts.
-4. This is advisory — do not block on missing retrospectives.
+
+### Step 0d: Starter Templates
+1. Check `${CLAUDE_PLUGIN_ROOT}/templates/starters/` for directories matching the project type.
+2. If a matching template exists (e.g., `op20-token/` for an OP-20 project):
+   - Read `template.yaml` to understand customization points.
+   - Include the template path in the agent dispatch prompt with instruction: "Clone from this template and customize according to the spec. Do NOT modify the template files themselves."
+3. This is advisory — agents may choose to build from scratch if the template doesn't fit.
+
+All steps are advisory — do not block on missing data.
 
 ---
 
@@ -558,11 +581,33 @@ Common issue flows at this stage:
 
 If the same agent pair has already been re-dispatched twice, defer to the auditor — it will catch remaining issues.
 
+#### Step 2b.5: Cross-Layer Validation (CONDITIONAL — multi-component builds only)
+
+**Only runs when `components.count >= 2` (multi-component build). Single-component builds skip this.**
+
+Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=validating status=validating`
+
+Launch `cross-layer-validator` agent:
+- Knowledge: `knowledge/slices/cross-layer-validation.md`
+- Import: ABI from `artifacts/contract/abi.json`
+- Scope: ALL frontend and backend source files
+- Output: `artifacts/validation/cross-layer-report.md`
+- `max_turns: 15`
+
+**Decision after validation:**
+- If MISMATCH findings exist: route each to the responsible builder agent (check the "Route to" field)
+- After fixes: re-run cross-layer validator (max 2 cycles)
+- WARNING findings are passed to the auditor as context in the next step
+- PASS findings confirm correct integration
+
+This step catches ABI mismatches, wrong method names, parameter type errors, contract address inconsistencies, and network config conflicts BEFORE the auditor runs — saving entire audit cycles.
+
 #### Step 2c: Security Audit
 
 Launch `opnet-auditor` agent:
 - Knowledge: `knowledge/slices/security-audit.md`
 - Scope: ALL source files across all components
+- Import: Cross-layer validation report from `artifacts/validation/cross-layer-report.md` (if available — pass WARNING findings as additional context)
 - Output: `artifacts/audit/findings.md`
 
 **Decision after audit:**
@@ -830,6 +875,24 @@ Duration: <elapsed minutes>
 ## Recommendations
 - [Concrete suggestions for similar future projects]
 ```
+
+### Update Adaptive Learning System
+
+After writing the retrospective, update the pattern store and agent scores:
+
+1. **Extract patterns** from the retrospective:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/extract-patterns.sh ${CLAUDE_PLUGIN_ROOT}/learning/<session-name>.md
+   ```
+   This reads anti-patterns and failures, appends them to `learning/patterns.yaml`, deduplicates, and auto-promotes patterns with 3+ occurrences to knowledge slices.
+
+2. **Update agent scores** from the session state:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-scores.sh .claude/loop/state.yaml <pass|fail>
+   ```
+   This reads agent_status from state, computes rolling metrics (success rate, avg cycles, tokens), and updates `learning/agent-scores.yaml`.
+
+Both scripts are idempotent — safe to re-run if interrupted.
 
 ### Final Checkpoint
 

@@ -54,7 +54,7 @@ fi
 
 # Only block exit during active loop phases
 case "$STATUS" in
-  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing)
+  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing|validating)
     ;;
   *)
     # Not in an active loop phase — allow exit
