@@ -12,7 +12,6 @@ import {
     Blockchain,
     BytesWriter,
     Calldata,
-    Map,
     OP20,
     Revert,
     SafeMath,

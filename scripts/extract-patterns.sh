@@ -126,17 +126,8 @@ with open(patterns_file, 'w') as f:
 
     # Auto-promote if count >= 3: append to relevant knowledge slice with [LEARNED] tag
     if [[ "$NEW_COUNT" -ge 3 ]]; then
-      # Map category to knowledge slice file
+      # Read category from the existing pattern to map to the right knowledge slice
       SLICE_FILE=""
-      case "$CATEGORY" in
-        frontend)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/frontend-dev.md" ;;
-        contract)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/contract-dev.md" ;;
-        backend)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/backend-dev.md" ;;
-        deployment) SLICE_FILE="$SCRIPT_DIR/knowledge/slices/deployment.md" ;;
-        testing)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/e2e-testing.md" ;;
-        *)          SLICE_FILE="$SCRIPT_DIR/knowledge/slices/integration-review.md" ;;
-      esac
-      # Read category from the existing pattern since we only have PAT_ID here
       CATEGORY_FOR_SLICE=$(python3 -c "
 import yaml, sys
 with open(sys.argv[1]) as f:
