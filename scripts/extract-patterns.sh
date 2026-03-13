@@ -35,10 +35,11 @@ PROJECT_TYPE=$(grep '^Project Type:' "$RETRO_FILE" | head -1 | awk '{print $3}' 
 TODAY=$(date '+%Y-%m-%d')
 
 # Extract anti-patterns section (between "## Anti-Patterns" and next "##")
-ANTI_PATTERNS=$(sed -n '/^## Anti-Patterns/,/^## /{/^## Anti-Patterns/d;/^## /d;p}' "$RETRO_FILE" | grep '^- ' | sed 's/^- //')
+# || true prevents pipefail exit when grep finds no matches
+ANTI_PATTERNS=$(sed -n '/^## Anti-Patterns/,/^## /{/^## Anti-Patterns/d;/^## /d;p}' "$RETRO_FILE" | grep '^- ' | sed 's/^- //' || true)
 
 # Extract what-failed section
-WHAT_FAILED=$(sed -n '/^## What Failed/,/^## /{/^## What Failed/d;/^## /d;p}' "$RETRO_FILE" | grep '^- ' | sed 's/^- //')
+WHAT_FAILED=$(sed -n '/^## What Failed/,/^## /{/^## What Failed/d;/^## /d;p}' "$RETRO_FILE" | grep '^- ' | sed 's/^- //' || true)
 
 # Combine both sections
 ALL_PATTERNS="$ANTI_PATTERNS"
@@ -123,9 +124,48 @@ with open(patterns_file, 'w') as f:
 
     UPDATED=$((UPDATED + 1))
 
-    # Auto-promote if count >= 3
+    # Auto-promote if count >= 3: append to relevant knowledge slice with [LEARNED] tag
     if [[ "$NEW_COUNT" -ge 3 ]]; then
-      echo "  PROMOTED: $PAT_ID (count=$NEW_COUNT) — eligible for knowledge slice update"
+      # Map category to knowledge slice file
+      SLICE_FILE=""
+      case "$CATEGORY" in
+        frontend)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/frontend-dev.md" ;;
+        contract)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/contract-dev.md" ;;
+        backend)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/backend-dev.md" ;;
+        deployment) SLICE_FILE="$SCRIPT_DIR/knowledge/slices/deployment.md" ;;
+        testing)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/e2e-testing.md" ;;
+        *)          SLICE_FILE="$SCRIPT_DIR/knowledge/slices/integration-review.md" ;;
+      esac
+      # Read category from the existing pattern since we only have PAT_ID here
+      CATEGORY_FOR_SLICE=$(python3 -c "
+import yaml, sys
+with open(sys.argv[1]) as f:
+    data = yaml.safe_load(f)
+for p in data.get('patterns', []):
+    if p.get('id') == sys.argv[2]:
+        print(p.get('category', 'orchestration'))
+        break
+" "$PATTERNS_FILE" "$PAT_ID" 2>/dev/null || echo "orchestration")
+      case "$CATEGORY_FOR_SLICE" in
+        frontend)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/frontend-dev.md" ;;
+        contract)   SLICE_FILE="$SCRIPT_DIR/knowledge/slices/contract-dev.md" ;;
+        backend)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/backend-dev.md" ;;
+        deployment) SLICE_FILE="$SCRIPT_DIR/knowledge/slices/deployment.md" ;;
+        testing)    SLICE_FILE="$SCRIPT_DIR/knowledge/slices/e2e-testing.md" ;;
+        *)          SLICE_FILE="$SCRIPT_DIR/knowledge/slices/integration-review.md" ;;
+      esac
+
+      if [[ -f "$SLICE_FILE" ]]; then
+        # Check if this pattern is already in the slice
+        if ! grep -q "$PAT_ID" "$SLICE_FILE" 2>/dev/null; then
+          printf '\n## [LEARNED] %s\n\n%s\n' "$PAT_ID" "$pattern" >> "$SLICE_FILE"
+          echo "  PROMOTED: $PAT_ID (count=$NEW_COUNT) — appended to $(basename "$SLICE_FILE")"
+        else
+          echo "  PROMOTED: $PAT_ID (count=$NEW_COUNT) — already in $(basename "$SLICE_FILE")"
+        fi
+      else
+        echo "  PROMOTED: $PAT_ID (count=$NEW_COUNT) — no slice file found for category"
+      fi
     fi
   else
     # Add new pattern
@@ -203,5 +243,29 @@ with open(patterns_file, 'w') as f:
     ADDED=$((ADDED + 1))
   fi
 done <<< "$ALL_PATTERNS"
+
+# Prune if pattern count exceeds 200 (remove lowest-frequency + oldest)
+python3 -c "
+import yaml, sys
+
+patterns_file = sys.argv[1]
+max_patterns = 200
+
+with open(patterns_file) as f:
+    data = yaml.safe_load(f)
+patterns = data.get('patterns', [])
+if not patterns or len(patterns) <= max_patterns:
+    sys.exit(0)
+
+# Sort by occurrence_count (ascending), then last_seen (ascending) — prune from bottom
+patterns.sort(key=lambda p: (p.get('occurrence_count', 0), p.get('last_seen', '')))
+pruned = len(patterns) - max_patterns
+patterns = patterns[pruned:]
+data['patterns'] = patterns
+
+with open(patterns_file, 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+print(f'Pruned {pruned} low-frequency patterns (cap: {max_patterns})')
+" "$PATTERNS_FILE"
 
 echo "Pattern extraction complete: $ADDED added, $UPDATED updated from $SESSION_NAME"

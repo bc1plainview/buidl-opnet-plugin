@@ -19,6 +19,10 @@
 - **Auditor dispatch** (`commands/buidl.md`): Now imports cross-layer validation report as additional context.
 - **Plugin version**: 3.4.0 -> 3.5.0
 
+### Deferred to v3.6
+- **Score-based routing** (US-6): Routing reviewer findings to agents based on historical success rates. Requires more data points before it's useful.
+- **Project-type profiles** (US-8): Auto-generated profiles after 5+ projects of the same type. Needs accumulation of pattern data first.
+
 ### Why
 The plugin had a learning system that saved retrospectives but barely used them — the orchestrator read them as advisory text with no structure, no indexing, and no feedback loop into agent prompts. Agents kept repeating the same mistakes across sessions. The pattern store + agent scoring creates a real feedback loop: every session's lessons are extracted, scored, and injected into future agent prompts. Cross-layer validation catches the #1 source of wasted audit/E2E cycles (ABI mismatches) before they reach expensive downstream agents. Starter templates eliminate boilerplate for the most common project type (OP-20 tokens).
 

@@ -8,7 +8,8 @@
 // - Skeleton loaders (NOT spinners)
 // - Explorer links for every transaction (mempool + OPScan)
 
-import { useState, useEffect, useCallback } from 'react';
+// CUSTOMIZE: Uncomment these imports after wiring up wallet + token hooks
+// import { useState, useEffect, useCallback } from 'react';
 // import { useWalletConnect } from './hooks/useWalletConnect';
 // import { useToken } from './hooks/useToken';
 

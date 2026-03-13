@@ -31,7 +31,7 @@ frontend_files:
   - src/App.tsx                   # Main app with wallet connect + token UI
   - src/hooks/useToken.ts         # Token interaction hook
   - vite.config.ts                # OPNet-ready Vite config with polyfills
-  - package.json                  # Dependencies with @rc tags
+  - package.json                  # Dependencies with semver ranges
 
 # Post-clone instructions for agents
 instructions: |

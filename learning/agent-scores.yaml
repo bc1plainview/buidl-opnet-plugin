@@ -96,3 +96,19 @@ agents:
     strengths: []
     weaknesses: []
     model_history: []
+  loop-explorer:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
+  loop-researcher:
+    sessions_completed: 0
+    success_rate: 0.0
+    avg_cycles_to_pass: 0
+    avg_tokens: 0
+    strengths: []
+    weaknesses: []
+    model_history: []
