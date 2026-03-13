@@ -67,6 +67,7 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `/buidl-cancel` | Cancel a running loop (preserves worktree for manual work) |
 | `/buidl-resume` | Resume an interrupted loop from last checkpoint |
 | `/buidl-clean` | Cancel + remove worktree and branch |
+| `/buidl-trace` | Show agent execution trace timeline for the current session |
 
 ### Flags
 
@@ -78,6 +79,7 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `--builder-model opus\|sonnet` | inherit | Override model for builder agents |
 | `--reviewer-model opus\|sonnet` | inherit | Override model for reviewer agent |
 | `--max-tokens N` | unlimited | Token budget with advisory enforcement |
+| `--dry-run` | off | Run Challenge + Specify + Explore, print execution plan, stop |
 
 ## Agents
 
@@ -306,15 +308,20 @@ If the loop is interrupted (context exhaustion, wall-clock timeout, manual cance
 | E2E hard gate | v3.4 | Shell-level enforcement: loop cannot exit until on-chain tests pass. |
 | Frontend smoke check | v3.4 | Playwright runtime verification before declaring frontend success. |
 | Pre-flight scan | v3.4 | 10 anti-pattern grep checks block completion on known bad patterns. |
+| Agent self-critique | v4.0 | Builder agents re-check output against spec before declaring done. Writes self-critique.md artifact. |
+| Incremental audit | v4.0 | Cycle 2+ audits focus on git diff + blast radius instead of full codebase re-scan. |
+| Dry-run mode | v4.0 | Preview execution plan without dispatching agents. |
+| Execution tracing | v4.0 | JSONL trace log of all agent dispatches, completions, routing, and errors. |
+| Dynamic re-planning | v4.0 | Queries learned patterns for known fixes when agents fail. |
 
 ## Project Structure
 
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v3.6.0)
+|   +-- plugin.json              # Plugin manifest (v4.0.0)
 +-- agents/                      # 12 agent definitions (incl. cross-layer-validator)
-+-- commands/                    # 7 slash commands
++-- commands/                    # 8 slash commands (incl. buidl-trace)
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
@@ -323,14 +330,14 @@ buidl/
 |   +-- patterns.yaml            # Structured pattern store (auto-updated)
 |   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
 |   +-- profiles/                # Auto-generated project-type profiles
-+-- scripts/                     # Setup + state writer + learning + routing scripts
++-- scripts/                     # Setup + state writer + learning + routing + tracing scripts
 +-- skills/                      # 3 triggerable skills
 |   +-- audit-from-bugs/
 |   +-- loop-guide/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 303 structural + functional + integration tests
++-- tests/                       # 330+ structural + functional + integration tests
 ```
 
 ## Testing
@@ -339,7 +346,7 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-303 tests across 28 categories:
+330+ tests across 34 categories:
 
 | Category | What it checks |
 |----------|----------------|
@@ -371,6 +378,12 @@ bash tests/plugin-tests.sh
 | Starter templates | Template manifest, contract template, frontend template, hook files |
 | Score-based routing | Taxonomy, keyword matching, candidate validation, functional routing tests |
 | Project-type profiles | Schema, threshold generation, profile YAML validation, functional profile tests |
+| Self-critique | Self-Critique step in all 4 builder agents, self-critique.md artifact reference |
+| Incremental audit | Incremental Audit Mode in auditor, git diff in buidl.md cycle 2 section |
+| Dry-run mode | --dry-run flag parsing, execution plan output |
+| Agent tracing | trace-event.sh exists, syntax, executable, functional JSON append test |
+| Dynamic re-planning | query-pattern.sh exists, syntax, executable, functional pattern query test |
+| Version 4.0.0 | plugin.json version matches CHANGELOG first entry |
 
 Tests run automatically on every push and PR via GitHub Actions.
 

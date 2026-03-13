@@ -269,6 +269,29 @@ If any FAIL item is found: fix it, re-run build, re-run smoke check, re-run pre-
 ### Context Budget Awareness
 If context is running low (responses truncating, tool calls slowing): STOP and write a summary of done vs remaining to session artifacts. Partial summary > half-finished step.
 
+### Step 6.9: Self-Critique (Reflexion)
+
+Before writing build-result.json, re-read ALL your changes against the requirements:
+
+1. Read `requirements.md` from the spec directory
+2. For each acceptance criterion, verify your implementation satisfies it
+3. Write `self-critique.md` to your artifacts directory:
+   ```markdown
+   # Self-Critique: opnet-frontend-dev
+
+   ## Spec Compliance
+   - [x/space] [acceptance criterion 1] -- [status/notes]
+   - [x/space] [acceptance criterion 2] -- [status/notes]
+
+   ## Issues Found and Fixed
+   - [what was caught and fixed, or "None"]
+
+   ## Remaining Concerns
+   - [anything uncertain -- reviewer should check]
+   ```
+4. If any criterion is NOT met: fix it now, re-run verify, update self-critique.md
+5. Only proceed to export artifacts after all criteria are checked
+
 ### Step 7: Export Artifacts
 After successful build:
 - Write `build-result.json` with: `{ "status": "success", "buildDir": "dist/", "devPort": 5173 }`
