@@ -101,9 +101,9 @@ Same checks as Step 3, applied to backend code:
 - Shared types/interfaces are consistent
 - Authentication patterns align
 
-### Step 6: Write Validation Report
+### Step 6: Output Validation Report
 
-Write `artifacts/validation/cross-layer-report.md`:
+Output your validation report as your final message (the orchestrator will save it to `artifacts/validation/cross-layer-report.md`):
 
 ```markdown
 # Cross-Layer Validation Report
@@ -137,7 +137,7 @@ Warnings: N (informational)
 
 ## Output Format
 
-Write `artifacts/validation/cross-layer-report.md` with findings.
+Output your findings as your final response text. The orchestrator saves the report file.
 - MISMATCH items should be routed to the responsible builder agent.
 - WARNING items are passed to the auditor as context.
 - PASS items confirm correct integration.

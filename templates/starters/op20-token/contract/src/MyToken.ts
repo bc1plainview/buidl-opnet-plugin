@@ -16,7 +16,6 @@ import {
     OP20,
     Revert,
     SafeMath,
-    Selector,
     StoredU256,
     u256,
 } from '@btc-vision/btc-runtime/runtime';

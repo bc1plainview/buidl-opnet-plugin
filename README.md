@@ -2,7 +2,7 @@
 
 [![Plugin Tests](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml/badge.svg)](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml)
 
-A Claude Code plugin that turns a single prompt into a production-ready, audited, deployed, and on-chain tested application. 11 specialized agents handle smart contract development, frontend, backend, security audit, deployment, real on-chain E2E testing, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle from idea to merged PR.
+A Claude Code plugin that turns a single prompt into a production-ready, audited, deployed, and on-chain tested application. 12 specialized agents handle smart contract development, frontend, backend, security audit, cross-layer validation, deployment, real on-chain E2E testing, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle from idea to merged PR.
 
 Built for OPNet (Bitcoin L1 smart contracts), but the core loop system works for any project. Non-OPNet projects get dynamic agent generation from templates.
 
@@ -101,6 +101,35 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `loop-explorer` | Codebase structure mapping and relevance analysis |
 | `loop-researcher` | Web search for existing solutions (build vs buy gate) |
 | `loop-reviewer` | PR review against spec + pattern checklist |
+| `cross-layer-validator` | READ-ONLY ABI-to-frontend/backend integration validation |
+
+## Adaptive Learning System (v3.5)
+
+The plugin learns from every session and gets smarter over time.
+
+### Pattern Store (`learning/patterns.yaml`)
+- Anti-patterns and failures from retrospectives are extracted into a structured YAML store
+- Deduplicated by description similarity; occurrence counts tracked across sessions
+- Patterns with 3+ occurrences auto-promote to relevant knowledge slices with `[LEARNED]` tags
+- Grep-queryable by category, tech stack, failure type
+
+### Agent Performance Scoring (`learning/agent-scores.yaml`)
+- Rolling averages for success rate, cycles to pass, and tokens consumed per agent
+- Per-model breakdowns (opus vs sonnet performance tracking)
+- Scores require 5+ data points before surfacing in `/buidl-status`
+- Orchestrator consults scores to inform agent dispatch order
+
+### Cross-Layer Validator
+- Validates ABI-to-frontend method mapping, parameter types, contract addresses, network config
+- Runs after all builders but before the auditor — catches integration mismatches early
+- 8 mismatch types with detection rules and routing decisions
+- READ-ONLY agent (cannot modify files)
+
+### Starter Templates (`templates/starters/`)
+- Pre-built project scaffolds for common OPNet patterns (OP-20 token included)
+- Template manifests with customization points (token name, symbol, decimals, features)
+- Includes contract, tests, frontend, hooks, and build config
+- Orchestrator detects matching templates and offers them during spec phase
 
 ## Enforcement Mechanisms
 
@@ -158,6 +187,7 @@ knowledge/
     +-- ui-testing.md           # Playwright setup, visual regression, wallet mocking
     +-- transaction-simulation.md # Simulation patterns for all agent types
     +-- integration-review.md   # Cross-layer review patterns
+    +-- cross-layer-validation.md # ABI-to-frontend/backend validation rules
     +-- project-setup.md        # OPNet project scaffolding
 ```
 
@@ -250,6 +280,9 @@ If the loop is interrupted (context exhaustion, wall-clock timeout, manual cance
 | Wall-clock timeout | v3.0 | Configurable max duration (default 60 min). Graceful save on timeout. |
 | Cost tracking | v3.0 | Token spend per agent in cost-ledger.md. Budget enforcement with --max-tokens. |
 | Learning system | v3.0 | Retrospectives saved to learning/. Future sessions consult past lessons. |
+| Adaptive learning | v3.5 | Pattern extraction, agent scoring, auto-promotion to knowledge slices. |
+| Cross-layer validation | v3.5 | ABI-to-frontend/backend integration checking between build and audit. |
+| Starter templates | v3.5 | Pre-built scaffolds for OP-20 tokens (more planned). |
 | Dynamic agents | v3.0 | Non-OPNet projects generate domain agents from templates. |
 | On-chain E2E testing | v3.2 | Real transactions with test wallets. Every method tested. Multi-wallet flows. |
 | PUA methodology | v3.3 | Exhaustive problem-solving with anti-rationalization and pressure escalation. |
@@ -263,21 +296,24 @@ If the loop is interrupted (context exhaustion, wall-clock timeout, manual cance
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v3.4.0)
-+-- agents/                      # 11 agent definitions
+|   +-- plugin.json              # Plugin manifest (v3.5.0)
++-- agents/                      # 12 agent definitions (incl. cross-layer-validator)
 +-- commands/                    # 7 slash commands
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
 |   +-- slices/                  # 10 knowledge slices
-+-- learning/                    # Retrospectives from past sessions
-+-- scripts/                     # Setup + atomic state writer
++-- learning/                    # Patterns, agent scores, retrospectives
+|   +-- patterns.yaml            # Structured pattern store (auto-updated)
+|   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
++-- scripts/                     # Setup + atomic state writer + learning scripts
 +-- skills/                      # 3 triggerable skills
 |   +-- audit-from-bugs/
 |   +-- loop-guide/
 |   +-- pua/
-+-- templates/                   # Domain agent + knowledge slice templates
-+-- tests/                       # 235 structural + integration tests
++-- templates/                   # Domain agent, knowledge slice, starter templates
+|   +-- starters/                # Project scaffolds (op20-token, more planned)
++-- tests/                       # 272 structural + integration tests
 ```
 
 ## Testing
@@ -286,7 +322,7 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-235 tests across 23 categories:
+272 tests across 26 categories:
 
 | Category | What it checks |
 |----------|----------------|
@@ -313,6 +349,9 @@ bash tests/plugin-tests.sh
 | Learning pruning | Cap at 20 retrospectives |
 | Orphan worktrees | Detection in status, cleanup in clean |
 | Guard-state-bash | Bash tool redirect blocking |
+| Adaptive learning | Pattern store schema, extraction scripts, agent scores format |
+| Cross-layer validator | Agent definition, knowledge slice, mismatch type coverage |
+| Starter templates | Template manifest, contract template, frontend template, hook files |
 
 Tests run automatically on every push and PR via GitHub Actions.
 

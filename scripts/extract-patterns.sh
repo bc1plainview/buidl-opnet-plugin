@@ -71,23 +71,23 @@ while IFS= read -r pattern; do
   # Check for existing similar pattern (first 40 chars match)
   MATCH_KEY=$(echo "$NORMALIZED" | cut -c1-40)
 
-  # Search existing patterns for a match
-  EXISTING_LINE=$(python3 -c "
+  # Search existing patterns for a match — pass all data via stdin, not interpolation
+  EXISTING_LINE=$(echo "$MATCH_KEY" | python3 -c "
 import yaml, sys
-with open('$PATTERNS_FILE') as f:
+match_key = sys.stdin.read().strip()
+patterns_file = sys.argv[1]
+with open(patterns_file) as f:
     data = yaml.safe_load(f)
 patterns = data.get('patterns', []) if data else []
 if not patterns:
     patterns = []
-match_key = '''$MATCH_KEY'''
 for i, p in enumerate(patterns):
     desc = p.get('description', '').lower()
-    # Remove punctuation for comparison
     desc_clean = ''.join(c for c in desc if c.isalnum() or c == ' ')
     if match_key[:30] in desc_clean[:50] or desc_clean[:30] in match_key[:50]:
         print(f'{i}|{p.get(\"id\", \"\")}|{p.get(\"occurrence_count\", 1)}')
         break
-" 2>/dev/null || echo "")
+" "$PATTERNS_FILE" 2>/dev/null || echo "")
 
   if [[ -n "$EXISTING_LINE" ]]; then
     # Update existing pattern: increment count, add session
@@ -96,24 +96,30 @@ for i, p in enumerate(patterns):
     OLD_COUNT=$(echo "$EXISTING_LINE" | cut -d'|' -f3)
     NEW_COUNT=$((OLD_COUNT + 1))
 
+    # Pass all variable data via command-line args, not string interpolation
     python3 -c "
-import yaml
-with open('$PATTERNS_FILE') as f:
+import yaml, sys
+patterns_file = sys.argv[1]
+idx = int(sys.argv[2])
+new_count = int(sys.argv[3])
+today = sys.argv[4]
+session_name = sys.argv[5]
+
+with open(patterns_file) as f:
     data = yaml.safe_load(f)
 patterns = data.get('patterns', [])
-idx = $IDX
-patterns[idx]['occurrence_count'] = $NEW_COUNT
-patterns[idx]['last_seen'] = '$TODAY'
+patterns[idx]['occurrence_count'] = new_count
+patterns[idx]['last_seen'] = today
 sessions = patterns[idx].get('source_sessions', [])
-if '$SESSION_NAME' not in sessions:
-    sessions.append('$SESSION_NAME')
+if session_name not in sessions:
+    sessions.append(session_name)
     patterns[idx]['source_sessions'] = sessions
-if $NEW_COUNT >= 3:
+if new_count >= 3:
     patterns[idx]['promoted_to_knowledge'] = True
 data['patterns'] = patterns
-with open('$PATTERNS_FILE', 'w') as f:
+with open(patterns_file, 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-" 2>/dev/null
+" "$PATTERNS_FILE" "$IDX" "$NEW_COUNT" "$TODAY" "$SESSION_NAME" 2>/dev/null
 
     UPDATED=$((UPDATED + 1))
 
@@ -156,9 +162,20 @@ with open('$PATTERNS_FILE', 'w') as f:
       FAILURE_TYPE="logic"
     fi
 
-    python3 -c "
-import yaml
-with open('$PATTERNS_FILE') as f:
+    # Pass all variable data via stdin JSON + command-line args
+    printf '%s' "$pattern" | python3 -c "
+import yaml, sys, json
+
+patterns_file = sys.argv[1]
+pat_id = sys.argv[2]
+category = sys.argv[3]
+project_type = sys.argv[4]
+failure_type = sys.argv[5]
+session_name = sys.argv[6]
+today = sys.argv[7]
+description = sys.stdin.read()
+
+with open(patterns_file) as f:
     data = yaml.safe_load(f)
 if not data:
     data = {'patterns': []}
@@ -166,22 +183,22 @@ patterns = data.get('patterns', [])
 if patterns is None:
     patterns = []
 patterns.append({
-    'id': '$PAT_ID',
-    'category': '$CATEGORY',
-    'tech_stack': ['$PROJECT_TYPE'],
-    'failure_type': '$FAILURE_TYPE',
-    'description': '''$(echo "$pattern" | sed "s/'/\\\\'/g")''',
+    'id': pat_id,
+    'category': category,
+    'tech_stack': [project_type],
+    'failure_type': failure_type,
+    'description': description,
     'fix': '',
-    'source_sessions': ['$SESSION_NAME'],
+    'source_sessions': [session_name],
     'occurrence_count': 1,
     'promoted_to_knowledge': False,
-    'first_seen': '$TODAY',
-    'last_seen': '$TODAY'
+    'first_seen': today,
+    'last_seen': today
 })
 data['patterns'] = patterns
-with open('$PATTERNS_FILE', 'w') as f:
+with open(patterns_file, 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-" 2>/dev/null
+" "$PATTERNS_FILE" "$PAT_ID" "$CATEGORY" "$PROJECT_TYPE" "$FAILURE_TYPE" "$SESSION_NAME" "$TODAY" 2>/dev/null
 
     ADDED=$((ADDED + 1))
   fi

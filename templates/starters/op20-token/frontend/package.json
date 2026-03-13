@@ -11,9 +11,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "opnet": "latest",
-    "@btc-vision/transaction": "latest",
-    "@btc-vision/bitcoin": "latest",
+    "opnet": "^1.0.0",
+    "@btc-vision/transaction": "^1.0.0",
+    "@btc-vision/bitcoin": "^1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

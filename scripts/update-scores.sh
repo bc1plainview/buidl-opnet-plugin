@@ -7,6 +7,8 @@
 #
 # Reads agent_status from the state file, updates rolling metrics in
 # learning/agent-scores.yaml for each agent that was dispatched.
+# The session-outcome parameter determines whether overall session success
+# is factored into per-agent scoring when individual agent status is ambiguous.
 #
 # Exit codes:
 #   0 — Success
@@ -40,25 +42,25 @@ TOKENS=$(grep '^tokens_used:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo
 BUILDER_MODEL=$(grep '^builder_model:' "$STATE_FILE" | head -1 | awk '{print $2}' || echo "sonnet")
 
 # Parse agent_status block to find which agents were dispatched
-# Format in state.yaml:
-#   agent_status:
-#     opnet-contract-dev: done
-#     opnet-frontend-dev: done
-#     opnet-auditor: done
+# Pass state file path via argv, not interpolation
 DISPATCHED_AGENTS=$(python3 -c "
-import yaml
-with open('$STATE_FILE') as f:
+import yaml, sys
+state_file = sys.argv[1]
+with open(state_file) as f:
     state = yaml.safe_load(f)
 agent_status = state.get('agent_status', {})
 for agent, status in agent_status.items():
     if status not in ('pending', ''):
         print(f'{agent}|{status}')
-" 2>/dev/null || echo "")
+" "$STATE_FILE" 2>/dev/null || echo "")
 
 if [[ -z "$DISPATCHED_AGENTS" ]]; then
   echo "No dispatched agents found in state file"
   exit 0
 fi
+
+# Count dispatched agents for per-agent token share calculation
+DISPATCHED_COUNT=$(echo "$DISPATCHED_AGENTS" | grep -c '|' || echo "1")
 
 UPDATED=0
 
@@ -67,10 +69,16 @@ while IFS= read -r line; do
   AGENT=$(echo "$line" | cut -d'|' -f1)
   STATUS=$(echo "$line" | cut -d'|' -f2)
 
-  # Determine if this agent succeeded (done/pass) or failed
+  # Determine if this agent succeeded
+  # Individual agent status takes priority; session outcome is fallback for ambiguous states
   AGENT_SUCCESS=0
   if [[ "$STATUS" == "done" || "$STATUS" == "pass" || "$STATUS" == "success" ]]; then
     AGENT_SUCCESS=1
+  elif [[ "$STATUS" == "dispatched" || "$STATUS" == "unknown" ]]; then
+    # Ambiguous status: use session-level outcome as fallback
+    if [[ "$OUTCOME" == "pass" ]]; then
+      AGENT_SUCCESS=1
+    fi
   fi
 
   # Determine model used
@@ -79,16 +87,24 @@ while IFS= read -r line; do
     MODEL="sonnet"
   fi
 
-  # Update scores
+  # Update scores — pass all variable data via command-line args
   python3 -c "
-import yaml
+import yaml, sys
 
-with open('$SCORES_FILE') as f:
+scores_file = sys.argv[1]
+agent_name = sys.argv[2]
+agent_success = int(sys.argv[3])
+cycle = int(sys.argv[4])
+total_tokens = int(sys.argv[5])
+dispatched_count = max(int(sys.argv[6]), 1)
+model = sys.argv[7]
+
+with open(scores_file) as f:
     data = yaml.safe_load(f)
 
 agents = data.get('agents', {})
-if '$AGENT' not in agents:
-    agents['$AGENT'] = {
+if agent_name not in agents:
+    agents[agent_name] = {
         'sessions_completed': 0,
         'success_rate': 0.0,
         'avg_cycles_to_pass': 0,
@@ -98,28 +114,25 @@ if '$AGENT' not in agents:
         'model_history': []
     }
 
-a = agents['$AGENT']
+a = agents[agent_name]
 old_count = a.get('sessions_completed', 0)
 new_count = old_count + 1
 a['sessions_completed'] = new_count
 
 # Rolling average for success rate
 old_rate = a.get('success_rate', 0.0)
-a['success_rate'] = round(((old_rate * old_count) + $AGENT_SUCCESS) / new_count, 3)
+a['success_rate'] = round(((old_rate * old_count) + agent_success) / new_count, 3)
 
 # Rolling average for cycles
 old_cycles = a.get('avg_cycles_to_pass', 0)
-a['avg_cycles_to_pass'] = round(((old_cycles * old_count) + $CYCLE) / new_count, 1)
+a['avg_cycles_to_pass'] = round(((old_cycles * old_count) + cycle) / new_count, 1)
 
 # Rolling average for tokens (approximate per-agent share)
-total_tokens = $TOKENS
-dispatched_count = len([l for l in '''$DISPATCHED_AGENTS'''.strip().split(chr(10)) if l])
-per_agent_tokens = total_tokens // max(dispatched_count, 1)
+per_agent_tokens = total_tokens // dispatched_count
 old_tokens = a.get('avg_tokens', 0)
 a['avg_tokens'] = int(((old_tokens * old_count) + per_agent_tokens) / new_count)
 
 # Update model history
-model = '$MODEL'
 model_history = a.get('model_history', [])
 found = False
 for mh in model_history:
@@ -128,23 +141,23 @@ for mh in model_history:
         new_mh_count = old_mh_count + 1
         mh['sessions'] = new_mh_count
         old_mh_rate = mh.get('success_rate', 0.0)
-        mh['success_rate'] = round(((old_mh_rate * old_mh_count) + $AGENT_SUCCESS) / new_mh_count, 3)
+        mh['success_rate'] = round(((old_mh_rate * old_mh_count) + agent_success) / new_mh_count, 3)
         found = True
         break
 if not found:
     model_history.append({
         'model': model,
         'sessions': 1,
-        'success_rate': float($AGENT_SUCCESS)
+        'success_rate': float(agent_success)
     })
 a['model_history'] = model_history
 
-agents['$AGENT'] = a
+agents[agent_name] = a
 data['agents'] = agents
 
-with open('$SCORES_FILE', 'w') as f:
+with open(scores_file, 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-" 2>/dev/null
+" "$SCORES_FILE" "$AGENT" "$AGENT_SUCCESS" "$CYCLE" "$TOKENS" "$DISPATCHED_COUNT" "$MODEL" 2>/dev/null
 
   UPDATED=$((UPDATED + 1))
 done <<< "$DISPATCHED_AGENTS"
