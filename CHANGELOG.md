@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.3.0] - 2026-03-13
+
+### Added
+- **PUA exhaustive problem-solving skill** (`skills/pua/SKILL.md`): Adapted from the PUA plugin — Three Iron Rules (exhaust options, act before asking, take initiative), Five-Step Methodology (smell, elevate, mirror, execute, retrospect), Seven-Point Checklist for stuck situations, Anti-Rationalization Table (10 blocked excuses with required actions), Proactivity Checklist, and Pressure Escalation (L1-L4 by cycle).
+- **GSD-2 debugging discipline**: Integrated into the PUA skill — form hypothesis before touching code, change one variable at a time, read error output completely, distinguish "I know" from "I assume", know when to stop (3 failures = mandatory checklist), don't fix symptoms.
+- **Decisions register template** (`templates/decisions.md`): Append-only log for architectural decisions made during sessions. Agents write to it, orchestrator and reviewer read it.
+- **Context budget awareness**: All builder agents now monitor context usage and checkpoint before running out.
+- **Pressure escalation in stop-hook**: Cycle 2 = elevated (3 hypotheses required), Cycle 3 = mandatory 7-Point Checklist, Cycle 4+ = last chance with structured failure report option.
+
+### Changed
+- **All builder agents** (loop-builder, opnet-contract-dev, opnet-frontend-dev, opnet-backend-dev): Added PUA skill loading in Step 0, debugging discipline + proactivity check after verify pipeline, rules for exhausting options, verifying fixes, and logging decisions.
+- **Auditor agent**: Added audit discipline section — read completely, distinguish know/assume, verify every finding, proactively check beyond the checklist.
+- **Reviewer agent**: Added review proactivity section — check similar issues, verify root cause fixes, check verification completeness, edge cases.
+- **Explorer agent**: Added thoroughness requirement from PUA Iron Rule One — exhaust all relevant areas, search multiple angles.
+- **Domain agent template**: PUA skill loading, debugging discipline, proactivity check, context budget awareness, decisions register.
+- **Orchestrator command** (`commands/buidl.md`): Decisions register initialization in Setup phase, PUA skill reference in agent dispatch template.
+- **Stop hook** (`hooks/scripts/stop-hook.sh`): PUA pressure escalation injected into re-injection prompts for both OPNet multi-agent and legacy single-builder flows.
+- **Plugin version**: 3.2.0 → 3.3.0
+
+### Why
+AI agents frequently give up too early on fixable problems — they rationalize failures ("this might be a known issue"), repeat the same broken approach, or ask the user to intervene when they have enough information to solve it themselves. PUA's structured escalation and anti-rationalization patterns, combined with GSD-2's debugging discipline, force agents to exhaust all options systematically before escalating. The pressure escalation in the stop-hook ensures that as cycles progress, the debugging requirements become more rigorous rather than more lenient.
+
 ## [3.2.0] - 2026-03-07
 
 ### Added

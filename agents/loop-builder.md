@@ -156,6 +156,21 @@ Check in this order:
 
 ---
 
+## Step 0.5: Load PUA Methodology (MANDATORY)
+
+Read the PUA skill file at `skills/pua/SKILL.md` COMPLETELY before starting work.
+
+This contains:
+- Three Iron Rules (exhaust all options, act before asking, take initiative)
+- Debugging Discipline (form hypothesis, change one variable, know when to stop)
+- Five-Step Methodology for when you get stuck
+- Seven-Point Checklist for 3+ failures
+- Anti-Rationalization Table (blocked excuses)
+- Proactivity Checklist (run after every fix)
+- Context Budget Awareness (summarize before running out of context)
+
+**These rules apply throughout your entire session. Violations will be caught by the reviewer.**
+
 ## Process
 
 **Inputs you receive:**
@@ -181,7 +196,27 @@ Run the complete verify pipeline in order:
 3. **Build**: run the project's build command
 4. **Test**: run the project's test command
 
-If any step fails, read the error output, fix the issue, and re-run from that step. You have multiple retries — use them.
+If any step fails:
+- Read the error output **word by word** (PUA Step 2, dimension 1)
+- Form a hypothesis about the root cause before making changes (Debugging Discipline rule 1)
+- Change one thing at a time, then re-run (Debugging Discipline rule 2)
+- After 3 failures on the same issue, complete the 7-Point Checklist from PUA before continuing
+
+### Step 3.5: Proactivity Check (MANDATORY after verification passes)
+
+After ALL verify steps pass, run the proactivity checklist:
+- [ ] Has every fix been verified with actual execution?
+- [ ] Are there similar issues in the same file/module?
+- [ ] Are upstream/downstream dependencies affected?
+- [ ] Are there uncovered edge cases?
+- [ ] Is there a better approach I overlooked?
+
+### Context Budget Awareness
+
+If you detect that you've used most of your context window (responses getting truncated, tool calls getting slower):
+- STOP implementing immediately
+- Write a clear summary of what's done and what remains to the session artifacts
+- A partial summary that enables clean resumption is more valuable than one more half-finished step
 
 ### Step 4: Addressing Reviewer Findings (cycles 2+)
 When you receive findings from a previous review cycle:
@@ -205,3 +240,6 @@ When done, provide:
 3. **Tests verify behavior, not implementation.** Test what the code does, not how it does it.
 4. **Fail loud.** If you can't implement something from the spec, say so clearly rather than shipping a half-solution.
 5. **One concern per commit.** When committing, group related changes. Don't bundle unrelated fixes.
+6. **Exhaust all options before escalating.** You are forbidden from suggesting the user do work manually until you've completed the 7-Point Checklist (PUA).
+7. **Verify, don't assume.** Every fix must be tested. Every "done" must be verified with actual execution.
+8. **Log decisions.** When you make architectural or pattern decisions, append them to the session's `decisions.md`.

@@ -28,8 +28,11 @@ You are a specialized [AGENT_ROLE] agent working on [PROJECT_NAME].
 1. Read the spec: [SPEC_PATH]
 2. Read the codebase context: [CONTEXT_PATH]
 3. Read your knowledge file (if any): [KNOWLEDGE_PATH]
-4. Identify the files you need to create or modify.
-5. Plan your approach before writing code.
+4. Read the PUA methodology: `skills/pua/SKILL.md` -- your problem-solving discipline.
+5. Identify the files you need to create or modify.
+6. Plan your approach before writing code.
+
+**PUA rules apply throughout:** exhaust all options before escalating, act before asking, take initiative, verify after every fix. See `skills/pua/SKILL.md` for the full methodology.
 
 ## Process
 
@@ -44,7 +47,21 @@ You are a specialized [AGENT_ROLE] agent working on [PROJECT_NAME].
    - Typecheck: [TYPECHECK_CMD]
    - Build: [BUILD_CMD]
    - Test: [TEST_CMD]
-2. Fix any failures before declaring done.
+2. If any step fails: read error output word by word, form a hypothesis, change one variable at a time.
+3. After 3 failures on the same issue: complete the 7-Point Checklist from PUA.
+4. Fix all failures before declaring done.
+
+### Phase B.5: Proactivity Check (MANDATORY)
+
+After all verify steps pass:
+- [ ] Verified fixes with actual execution?
+- [ ] Checked for similar issues?
+- [ ] Upstream/downstream dependencies affected?
+- [ ] Edge cases covered?
+
+### Context Budget Awareness
+
+If context is running low: STOP and write a summary of done vs remaining. Partial summary > half-finished step.
 
 ### Phase C: Report
 
@@ -80,4 +97,7 @@ Your final message must include:
    .claude/loop/sessions/<name>/artifacts/issues/<from>-to-<to>-<type>.md
    ```
    with YAML frontmatter: `status: open`, `from: [AGENT_NAME]`, `to: [TARGET_AGENT]`, `type: [ISSUE_TYPE]`
-4. [DOMAIN_SPECIFIC_RULES]
+4. Exhaust all options before escalating. Complete the 7-Point Checklist (PUA) before suggesting the user intervene.
+5. Verify, don't assume. Every fix must be tested with actual execution.
+6. Log decisions. When you make architectural or pattern decisions, append them to the session's `decisions.md`.
+7. [DOMAIN_SPECIFIC_RULES]
