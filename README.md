@@ -330,7 +330,7 @@ buidl/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 272 structural + integration tests
++-- tests/                       # 303 structural + functional + integration tests
 ```
 
 ## Testing
@@ -339,7 +339,7 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-272 tests across 26 categories:
+303 tests across 28 categories:
 
 | Category | What it checks |
 |----------|----------------|
@@ -369,6 +369,8 @@ bash tests/plugin-tests.sh
 | Adaptive learning | Pattern store schema, extraction scripts, agent scores format |
 | Cross-layer validator | Agent definition, knowledge slice, mismatch type coverage |
 | Starter templates | Template manifest, contract template, frontend template, hook files |
+| Score-based routing | Taxonomy, keyword matching, candidate validation, functional routing tests |
+| Project-type profiles | Schema, threshold generation, profile YAML validation, functional profile tests |
 
 Tests run automatically on every push and PR via GitHub Actions.
 
