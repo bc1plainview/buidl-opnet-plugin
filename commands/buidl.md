@@ -187,16 +187,27 @@ Before running the gates, check for an existing project-type profile:
    - If the user chooses to skip: jump to Phase 2 with the profile's pitfalls pre-loaded.
 2. If no matching profile exists, proceed with the full challenge.
 
+### Gate Classification
+
+Gates are classified as SOFT or HARD:
+- **SOFT gates (1-4):** Goal Alignment, Build vs Buy, Simplest Thing, Problem Not Solution. When `--skip-challenge` is set, these are SKIPPED (logged to trace as "skipped via --skip-challenge").
+- **HARD gates (5-6):** Testability, OPNet Classification. These ALWAYS run, even when `--skip-challenge` is set. If a hard gate fails, the loop STOPS regardless of any skip flag.
+
+When `--skip-challenge` is set:
+1. Log each skipped soft gate: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> checkpoint orchestrator challenge <cycle> "Skipped soft gate N via --skip-challenge"`
+2. Run hard gates (5-6) normally — user must answer.
+3. If a hard gate fails and the user does not override, STOP the loop.
+
 ### Round 1: The Five Gates
 
 Run these gates in order using AskUserQuestion. If any gate fails, explain why and give the user the choice to override or stop.
 
-**Gate 1 — Goal Alignment:**
+**Gate 1 — Goal Alignment (SOFT):**
 Ask: "Which active priority or goal does this advance? If it doesn't connect to anything you're currently focused on, it might be a distraction."
 - Present known priorities if available from CLAUDE.md or context.
 - If user says "none" → warn but allow override.
 
-**Gate 2 — Build vs Buy:**
+**Gate 2 — Build vs Buy (SOFT):**
 While asking the next question, launch a `loop-researcher` agent in the background to search for existing solutions:
 - Give the researcher the raw idea text.
 - It will search the web for existing tools, libraries, or services that cover 80%+ of the need.
@@ -205,13 +216,13 @@ Ask: "Before we build, let me check if something already exists that does this."
 - When researcher returns, present findings.
 - If 80%+ coverage found → recommend using the existing solution. User can override.
 
-**Gate 3 — Simplest Thing:**
+**Gate 3 — Simplest Thing (SOFT):**
 Ask: "What's the absolute minimum version of this that delivers value? Describe the smallest thing that closes the loop."
 
-**Gate 4 — Problem, Not Solution:**
+**Gate 4 — Problem, Not Solution (SOFT):**
 Ask: "What problem does this solve? Not what feature you want — what pain are you addressing, and who feels it?"
 
-**Gate 5 — Testability:**
+**Gate 5 — Testability (HARD):**
 Ask: "Write one acceptance test right now. 'When [I do X], then [Y should happen].' If you can't write one, the idea isn't concrete enough yet."
 
 ### Round 2: Spec Questions
@@ -238,7 +249,7 @@ Then challenge 2-3 design choices:
 - "You said [X], but what if we just [simpler alternative]?"
 - "This and this seem to potentially conflict — which takes priority?"
 
-### Gate 6 — OPNet Classification (if Bitcoin/OPNet detected):
+### Gate 6 — OPNet Classification (HARD — if Bitcoin/OPNet detected):
 Ask: "Is this a contract, frontend, backend, or full-stack project? What network (mainnet/testnet/regtest)? What token standard if applicable (OP20/OP721/custom)?"
 - This determines which agents are spawned in Phase 4
 - Record the answers for the orchestrator
@@ -331,6 +342,48 @@ Write to `.claude/loop/sessions/<name>/spec/tasks.md`:
 ```
 
 For verify commands: check `package.json` scripts, `Makefile`, `tsconfig.json`, `.eslintrc`/`eslint.config` to auto-detect. If not found, ask the user.
+
+### Chain Probe (OPNet projects only)
+
+If this is an OPNet project (detected from challenge answers mentioning OPNet/OP-20/OP-721/contract, or `package.json` containing `@btc-vision/` or `opnet` dependencies):
+
+1. Run the chain probe before finalizing the spec:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/chain-probe.sh .claude/loop/sessions/<name>/artifacts [rpc-url]
+   ```
+2. Read the resulting `artifacts/chain-state.json`.
+3. If `probe_status` is `"success"`:
+   - Include `block_height` and `gas_parameters` in `design.md` under a "Deployment Constraints" section.
+   - Reference the chain state in the spec context for gas estimation and network selection.
+4. If `probe_status` is `"failed"`:
+   - Log the failure but do NOT block spec generation.
+   - Note in design.md: "Chain probe failed -- gas parameters should be fetched at deployment time."
+
+### Generate Acceptance Tests
+
+After `tasks.md` is generated, extract acceptance criteria and generate test stubs:
+
+1. Read `requirements.md` and extract every acceptance criterion from each user story.
+2. For each criterion, generate a shell-script test stub in `artifacts/acceptance-tests/`:
+   - File naming: `test-{story-number}-{criterion-slug}.sh`
+   - Use the existing `pass()`/`fail()`/`check()` helper convention.
+   - Each test should contain: setup, action, assertion, and a clear description.
+   - Tests can start as stubs (with `echo "TODO: implement"` and a `fail` call) to be filled in by builders.
+3. Generate an `artifacts/acceptance-tests/run-all.sh` that sources each test file.
+4. Include the generated acceptance tests in the Human Approval Gate below -- the user must review and approve these tests alongside the spec documents.
+
+Example acceptance test stub:
+```bash
+#!/bin/bash
+# Test: US-1 Acceptance Criterion 1
+# When [action], then [expected outcome]
+
+DESCRIPTION="[user story]: [criterion description]"
+
+# TODO: Implement test logic
+# check "$DESCRIPTION" [test command]
+fail "$DESCRIPTION -- not yet implemented"
+```
 
 ### Spec Quality Gate
 
@@ -510,10 +563,13 @@ For each agent in the plan, construct the prompt and pass the appropriate `max_t
 |-----------|-----------|
 | Builders (contract-dev, frontend-dev, backend-dev, loop-builder) | 30 |
 | Auditors (opnet-auditor) | 20 |
+| Adversarial Auditors (opnet-adversarial-auditor) | 20 |
 | Deployers (opnet-deployer) | 15 |
 | E2E Testers (opnet-e2e-tester) | 25 |
+| Adversarial E2E Testers (opnet-adversarial-tester) | 25 |
 | UI Testers (opnet-ui-tester) | 20 |
 | Reviewers (loop-reviewer) | 15 |
+| Reviewers in critique mode (loop-reviewer) | 10 |
 | Explorers (loop-explorer) | 15 |
 | Researchers (loop-researcher) | 10 |
 
@@ -554,6 +610,25 @@ Read the PUA methodology: ${CLAUDE_PLUGIN_ROOT}/skills/pua/SKILL.md — this gov
 Write your artifacts to: .claude/loop/sessions/[name]/artifacts/[domain]/
 ```
 
+**Cross-Agent Critique (after each builder completes):**
+
+After each builder agent completes, route its output to a different agent for critique mode review. This replaces self-critique with independent verification.
+
+Critique routing table:
+| Builder | Critique Agent |
+|---------|---------------|
+| `opnet-contract-dev` | `loop-reviewer` (critique mode) |
+| `opnet-frontend-dev` | `opnet-backend-dev` (if present) OR `loop-reviewer` (critique mode) |
+| `opnet-backend-dev` | `opnet-frontend-dev` (if present) OR `loop-reviewer` (critique mode) |
+| `loop-builder` | `loop-reviewer` (critique mode) |
+
+Critique dispatch:
+1. After builder completes, dispatch the critique agent with: builder's output artifacts, spec documents, and instruction "Review in critique mode."
+2. Critique agent writes `artifacts/cross-critique.md`.
+3. If critique finds CRITICAL findings: route them back to the original builder for fixes before proceeding.
+4. If critique finds only MINOR/NITS: proceed to next step (findings are logged for the reviewer).
+5. Max critique-fix cycles per builder: 1 (to prevent infinite loops).
+
 **After each agent completes:** Log to cost-ledger.md, update tokens_used in state.
 
 **If an agent fails:**
@@ -589,6 +664,14 @@ Launch `opnet-contract-dev` agent:
 - ABI JSON must exist and be valid JSON
 - If failed: retry once, then report failure and stop
 
+**ABI Lock Checkpoint:**
+After contract-dev completes successfully:
+1. Compute the ABI hash: `ABI_HASH=$(shasum -a 256 artifacts/contract/abi.json | awk '{print $1}')`
+2. Store via write-state.sh: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh abi_hash=$ABI_HASH abi_locked=true`
+3. Log: "ABI locked with hash: $ABI_HASH"
+
+This hash is verified before frontend/backend dispatch to detect unauthorized ABI modifications.
+
 #### Issue Check: Post-Contract (CONDITIONAL)
 
 **Only runs when `components.count >= 2` (multi-component build). Single-component builds skip this.**
@@ -607,6 +690,16 @@ After contract-dev completes, scan `artifacts/issues/` for new open issues:
 ```
 
 If issues were found and resolved, continue to Step 2b. If issues are deferred, they'll be caught by the auditor in Step 2c.
+
+#### ABI Lock Verification (before Step 2b)
+
+Before dispatching frontend or backend agents, verify the ABI has not been modified:
+1. Read `abi_locked` and `abi_hash` from state.
+2. If `abi_locked` is `true`:
+   - Compute current hash: `CURRENT_HASH=$(shasum -a 256 artifacts/contract/abi.json | awk '{print $1}')`
+   - Compare with stored `abi_hash`.
+   - If mismatch: **BLOCK** frontend/backend dispatch. Log "ABI MISMATCH: expected $abi_hash, got $CURRENT_HASH". Re-dispatch `opnet-contract-dev` to investigate.
+   - If match: proceed normally.
 
 #### Step 2b: Frontend + Backend Development (parallel, after ABI ready)
 
@@ -699,6 +792,31 @@ Launch `opnet-auditor` agent:
   - After fixes: re-run auditor
   - Max audit cycles: 2 (if still FAIL after 2, report to user and stop)
 
+#### Step 2c.5: Adversarial Audit (after pattern audit, before deployment)
+
+Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=adversarial_auditing status=adversarial_auditing`
+
+Launch `opnet-adversarial-auditor` agent:
+- Knowledge: Contract ABI from `artifacts/contract/abi.json`
+- Import: Spec documents from `spec/` directory (for invariant extraction)
+- Import: Contract source files
+- Output: `artifacts/audit/adversarial-findings.md`
+- `max_turns: 20`
+
+The adversarial auditor:
+1. Reads requirements.md and extracts all invariants
+2. Reads contract source code
+3. For each invariant, constructs specific input sequences that could violate it
+4. Produces structured findings with PASS/FAIL verdict per invariant
+
+**Decision after adversarial audit:**
+- If overall verdict is **PASS**: proceed to deployment (Step 2d)
+- If overall verdict is **FAIL**:
+  - Route FAIL findings to `opnet-contract-dev` for fixes
+  - After fixes: re-run adversarial auditor (max 2 cycles)
+  - If still FAIL after 2 cycles: report to user and stop
+  - **FAIL verdict BLOCKS deployment. No exceptions.**
+
 #### Step 2d: Deployment (after audit PASS)
 
 **Testnet deployment is automatic. Mainnet requires user approval.**
@@ -767,6 +885,32 @@ The E2E tester:
   - NEVER skip on-chain E2E failures — they represent real bugs that burn BTC
 
 **Human blocker check:** If E2E tests require funded test wallets that don't exist yet, surface this to the user ONCE with exact instructions (which address to fund, how many sats needed). This is the ONE thing the user may need to do. Everything else is automated.
+
+#### Step 2e.5: Adversarial E2E Testing (after happy-path E2E, before UI testing)
+
+Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=adversarial_testing status=adversarial_testing`
+
+Launch `opnet-adversarial-tester` agent:
+- Knowledge: `knowledge/slices/e2e-testing.md`
+- Import: Contract ABI from `artifacts/contract/abi.json`
+- Import: Deployed contract address from `artifacts/deployment/receipt.json`
+- Import: Spec documents for expected behavior
+- Import: Happy-path E2E results from `artifacts/testing/e2e-results.json`
+- Output: `artifacts/testing/adversarial-e2e-results.json`
+- `max_turns: 25`
+
+The adversarial E2E tester sends REAL transactions targeting:
+1. Boundary values (zero, max, exact-balance amounts)
+2. Revert exploitation (missing prerequisites, expired params, double-calls)
+3. Access control bypass (non-owner calls, contract-caller attacks)
+4. Race conditions (conflicting parallel transactions, double-spend attempts)
+
+**Decision after adversarial E2E tests:**
+- If all tests match expectations: proceed to UI testing (Step 2f)
+- If unexpected behavior found:
+  - Route contract failures to `opnet-contract-dev` for fixes
+  - After fixes: re-deploy and re-run adversarial tester
+  - Max adversarial E2E test cycles: 2
 
 #### Step 2f: UI Testing (after on-chain E2E passes)
 
@@ -873,7 +1017,61 @@ Save the review output to `.claude/loop/sessions/<name>/reviews/cycle-<N>.md`.
   - For OPNet projects: candidate agents are `opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev`.
   - For generic projects: candidate agents are derived from the agents that were dispatched in this session.
   - After routing, write a categorized findings file to `artifacts/findings-categorized.md` for use by `update-scores.sh --findings` during wrap-up. Format per finding: `agent: <name> | category: <category> | outcome: pending`
-- If no (max cycles reached): update state to `failed`. Print remaining findings and the PR URL. The human takes over.
+- If no (max cycles reached): update state to `failed`. Generate failure diagnosis and print remaining findings with the PR URL. The human takes over.
+
+### Findings Ledger
+
+After Phase 5 review completes (every cycle), parse the reviewer's findings and maintain a structured ledger:
+
+1. Read the review output from `reviews/cycle-<N>.md`.
+2. For each finding, assign a unique ID: `F-001`, `F-002`, etc. (incrementing across cycles).
+3. Write or update `artifacts/findings-ledger.md` in this format:
+
+```markdown
+# Findings Ledger
+
+| ID | Cycle Found | Cycle Resolved | Status | Finding | File | Agent |
+|----|-------------|----------------|--------|---------|------|-------|
+| F-001 | 1 | - | OPEN | [description] | [file:line] | [responsible agent] |
+| F-002 | 1 | 2 | RESOLVED | [description] | [file:line] | [responsible agent] |
+| F-003 | 2 | - | REGRESSION | [description] | [file:line] | [responsible agent] |
+```
+
+4. Status values: `OPEN` (new finding), `RESOLVED` (fixed in a later cycle), `REGRESSION` (was resolved but reappeared).
+5. **3-cycle archiving rule**: For findings where `(current_cycle - cycle_found) > 3`, move them to an "Archived Findings" section at the bottom of the ledger. Archived findings are not checked for regression — they are historical records only.
+6. For cycle 2+ reviewer dispatch: include the ledger in the prompt with instruction: "Check all RESOLVED findings for regression. Mark regressions as CRITICAL with [REGRESSION] tag."
+
+### Structured Failure Diagnosis
+
+When `cycle >= max_cycles` and the verdict is FAIL, generate `artifacts/failure-diagnosis.md`:
+
+```markdown
+# Failure Diagnosis
+
+## Classification
+[One of: spec_problem, implementation_problem, test_problem, infrastructure_problem]
+
+## Evidence
+- [Specific evidence supporting the classification]
+- [Patterns across cycles that point to root cause]
+
+## Unresolved Findings
+[List all OPEN findings from the findings ledger]
+
+## Cycle History
+[Brief summary of what was attempted in each cycle and why it failed]
+
+## Recommended Next Step
+[Concrete recommendation: amend spec, manual fix at specific file:line, infrastructure change, etc.]
+```
+
+Classification guide:
+- `spec_problem`: Requirements are contradictory, ambiguous, or impossible to implement as stated
+- `implementation_problem`: Code bugs that agents couldn't fix within cycle budget
+- `test_problem`: Tests are flawed or expectations don't match spec
+- `infrastructure_problem`: Build toolchain, dependency, or environment issues
+
+Include the failure diagnosis path in the summary output.
 
 ---
 
@@ -914,9 +1112,15 @@ When the loop completes (PASS or max cycles), provide:
 ### Files Modified
 [List from the PR]
 
+### Failure Diagnosis (if FAILED)
+[Classification, evidence, and recommended next step from artifacts/failure-diagnosis.md]
+
+### Findings Ledger Summary
+[Open: N, Resolved: N, Regression: N — from artifacts/findings-ledger.md]
+
 ### Next Steps
 [If PASSED: "PR is ready for human review and merge."]
-[If FAILED: "These findings remain unresolved: ..." with the specific issues]
+[If FAILED: "These findings remain unresolved: ..." with the specific issues and the failure diagnosis]
 ```
 
 ---

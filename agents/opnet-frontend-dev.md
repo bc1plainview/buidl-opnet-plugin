@@ -65,6 +65,10 @@ Before writing ANY code:
 - FORBIDDEN: `number` for token amounts (use `bigint`)
 - FORBIDDEN: `Buffer` -- use `Uint8Array` + `BufferHelper` from `@btc-vision/transaction`
 
+### Acceptance Test Lock
+- FORBIDDEN: Modifying ANY file in `artifacts/acceptance-tests/` -- these are human-approved locked tests
+- REQUIRED: The verify pipeline MUST include running acceptance tests from `artifacts/acceptance-tests/` if they exist
+
 ### Transaction Rules (CRITICAL SECURITY)
 - FORBIDDEN: `signer: wallet.keypair` on frontend -- THIS LEAKS THE PRIVATE KEY
 - FORBIDDEN: `mldsaSigner: wallet.mldsaKeypair` on frontend -- SAME LEAK
@@ -269,28 +273,7 @@ If any FAIL item is found: fix it, re-run build, re-run smoke check, re-run pre-
 ### Context Budget Awareness
 If context is running low (responses truncating, tool calls slowing): STOP and write a summary of done vs remaining to session artifacts. Partial summary > half-finished step.
 
-### Step 6.9: Self-Critique (Reflexion)
-
-Before writing build-result.json, re-read ALL your changes against the requirements:
-
-1. Read `requirements.md` from the spec directory
-2. For each acceptance criterion, verify your implementation satisfies it
-3. Write `self-critique.md` to your artifacts directory:
-   ```markdown
-   # Self-Critique: opnet-frontend-dev
-
-   ## Spec Compliance
-   - [x/space] [acceptance criterion 1] -- [status/notes]
-   - [x/space] [acceptance criterion 2] -- [status/notes]
-
-   ## Issues Found and Fixed
-   - [what was caught and fixed, or "None"]
-
-   ## Remaining Concerns
-   - [anything uncertain -- reviewer should check]
-   ```
-4. If any criterion is NOT met: fix it now, re-run verify, update self-critique.md
-5. Only proceed to export artifacts after all criteria are checked
+**Note:** Cross-critique is handled by the orchestrator after completion. Do not self-critique.
 
 ### Step 7: Export Artifacts
 After successful build:

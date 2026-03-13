@@ -67,6 +67,7 @@ Additionally read `knowledge/opnet-troubleshooting.md` for common errors and the
 ✗ float for financial values — FORBIDDEN
 ✗ inline CSS (style={{ }}) — FORBIDDEN
 ✗ Section separator comments (// ===) — FORBIDDEN
+✗ Modifying files in artifacts/acceptance-tests/ — FORBIDDEN (human-approved locked tests)
 ```
 
 ### Transaction Rules (Non-Negotiable)
@@ -218,28 +219,7 @@ If you detect that you've used most of your context window (responses getting tr
 - Write a clear summary of what's done and what remains to the session artifacts
 - A partial summary that enables clean resumption is more valuable than one more half-finished step
 
-### Step 3.7: Self-Critique (Reflexion)
-
-Before declaring your build complete, re-read ALL your changes against the requirements:
-
-1. Read `requirements.md` from the spec directory
-2. For each acceptance criterion, verify your implementation satisfies it
-3. Write `self-critique.md` to your artifacts directory:
-   ```markdown
-   # Self-Critique: loop-builder
-
-   ## Spec Compliance
-   - [x/space] [acceptance criterion 1] -- [status/notes]
-   - [x/space] [acceptance criterion 2] -- [status/notes]
-
-   ## Issues Found and Fixed
-   - [what was caught and fixed, or "None"]
-
-   ## Remaining Concerns
-   - [anything uncertain -- reviewer should check]
-   ```
-4. If any criterion is NOT met: fix it now, re-run verify, update self-critique.md
-5. Only proceed to export/completion after all criteria are checked
+**Note:** Cross-critique is handled by the orchestrator after completion. Do not self-critique.
 
 ### Step 4: Addressing Reviewer Findings (cycles 2+)
 When you receive findings from a previous review cycle:

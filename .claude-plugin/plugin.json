@@ -1,7 +1,7 @@
 {
   "name": "buidl",
-  "version": "4.0.0",
-  "description": "Full dev lifecycle for OP_NET Bitcoin L1 projects: idea → challenge → spec → build → review → ship. Self-learning across sessions with pattern extraction, agent performance scoring, score-based finding routing, project-type profiles, cross-layer validation, and starter templates. Includes shell-enforced E2E testing gates, frontend runtime smoke checks, PUA problem-solving methodology, the OP_NET Bible (2000+ lines), agent self-critique, incremental audits, dry-run mode, execution tracing, and dynamic re-planning from learned patterns. Agents get smarter with every project.",
+  "version": "5.0.0",
+  "description": "Full dev lifecycle for OP_NET Bitcoin L1 projects: idea → challenge → spec → build → review → ship. Self-learning across sessions with pattern extraction, agent performance scoring, score-based finding routing, project-type profiles, cross-layer validation, and starter templates. Includes shell-enforced E2E testing gates, frontend runtime smoke checks, PUA problem-solving methodology, the OP_NET Bible (2000+ lines), cross-agent critique, adversarial auditing, adversarial E2E testing, ABI-lock checkpoints, findings ledger with regression tracking, acceptance test generation, chain probe, hard gate enforcement, incremental audits, dry-run mode, execution tracing, and dynamic re-planning from learned patterns. Agents get smarter with every project.",
   "author": {
     "name": "dannyplainview + bob"
   }

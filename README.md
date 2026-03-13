@@ -2,7 +2,7 @@
 
 [![Plugin Tests](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml/badge.svg)](https://github.com/bc1plainview/buidl-opnet-plugin/actions/workflows/plugin-tests.yml)
 
-A Claude Code plugin that turns a single prompt into a production-ready, audited, deployed, and on-chain tested application. 12 specialized agents handle smart contract development, frontend, backend, security audit, cross-layer validation, deployment, real on-chain E2E testing, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle from idea to merged PR.
+A Claude Code plugin that turns a single prompt into a production-ready, audited, deployed, and on-chain tested application. 14 specialized agents handle smart contract development, frontend, backend, security audit, adversarial invariant testing, cross-layer validation, deployment, real on-chain E2E testing, adversarial E2E testing, UI testing, and code review — coordinated by an orchestrator that manages the full lifecycle from idea to merged PR.
 
 Built for OPNet (Bitcoin L1 smart contracts), but the core loop system works for any project. Non-OPNet projects get dynamic agent generation from templates.
 
@@ -93,6 +93,8 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `opnet-auditor` | READ-ONLY security audit against 27 real-bug patterns | Findings with PASS/FAIL verdict |
 | `opnet-deployer` | TransactionFactory deployment to testnet/mainnet | Deployment receipt + E2E handoff file |
 | `opnet-e2e-tester` | Real on-chain E2E tests with test wallets | Per-method pass/fail with tx hashes |
+| `opnet-adversarial-auditor` | READ-ONLY invariant-based adversarial analysis | PASS/FAIL per invariant with attack sequences |
+| `opnet-adversarial-tester` | Adversarial E2E tests (boundary, revert, access control, race) | Per-category pass/fail with tx hashes |
 | `opnet-ui-tester` | Playwright smoke + E2E + visual regression | Test results + screenshots |
 
 ### Core Loop Agents
@@ -102,7 +104,7 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `loop-builder` | General-purpose code implementation (non-OPNet projects) |
 | `loop-explorer` | Codebase structure mapping and relevance analysis |
 | `loop-researcher` | Web search for existing solutions (build vs buy gate) |
-| `loop-reviewer` | PR review against spec + pattern checklist |
+| `loop-reviewer` | PR review against spec + pattern checklist + critique mode |
 | `cross-layer-validator` | READ-ONLY ABI-to-frontend/backend integration validation |
 
 ---
@@ -113,8 +115,23 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 
 Agents don't just execute instructions — they self-correct, learn from past sessions, and adapt their behavior based on accumulated experience.
 
-#### Self-Critique (Reflexion)
-All 4 builder agents (contract-dev, frontend-dev, backend-dev, loop-builder) re-read their changes against `requirements.md` before declaring done. Each writes a `self-critique.md` artifact with a spec compliance checklist, issues found and fixed, and remaining concerns. Any unmet acceptance criterion blocks completion until fixed. This catches spec drift before the reviewer does, saving entire review cycles.
+#### Cross-Agent Critique
+After each builder agent completes, its output is routed to a different agent for independent critique. Contract-dev output goes to loop-reviewer, frontend-dev to backend-dev (or reviewer), backend-dev to frontend-dev (or reviewer), loop-builder to loop-reviewer. CRITICAL findings route back to the original builder. This replaces self-critique with independent verification, catching blind spots that self-review misses.
+
+#### Adversarial Auditing
+The adversarial auditor agent extracts invariants from requirements.md, reads contract source, and constructs specific input sequences (zero amounts, max values, access control bypass, arithmetic overflow) that could violate each invariant. FAIL verdict blocks deployment. This goes beyond pattern-matching to test whether stated guarantees actually hold.
+
+#### Adversarial E2E Testing
+After happy-path E2E tests pass, the adversarial E2E tester sends real on-chain transactions targeting boundary values, revert exploitation, access control bypass, and race conditions. Every test includes a tx hash for verification.
+
+#### Acceptance Test Locking
+During spec generation, acceptance criteria are extracted from requirements.md and turned into shell-script test stubs in `artifacts/acceptance-tests/`. These tests are approved by the user and LOCKED -- builder agents are FORBIDDEN from modifying them. The verify pipeline includes running these locked tests.
+
+#### ABI-Lock Checkpoint
+After contract-dev completes, the orchestrator computes a SHA-256 hash of abi.json and locks it in state. Before frontend/backend agents start, the hash is verified. Any mismatch blocks dispatch and triggers contract-dev re-investigation.
+
+#### Findings Ledger
+Every reviewer finding is assigned a unique ID and tracked in a structured ledger across cycles. The ledger tracks OPEN, RESOLVED, and REGRESSION statuses. Reviewers in cycle 2+ verify that previously resolved findings haven't regressed.
 
 #### Incremental Audit
 On cycle 2+, the auditor receives a `git diff` of changes since the last audit plus previous findings, instead of re-scanning the entire codebase. It focuses on the diff, checks blast radius of changes, and verifies previous findings are resolved. Cuts audit time significantly on fix cycles.
@@ -269,8 +286,10 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
      +-- frontend-dev  (parallel with backend)     max_turns: 30
      +-- backend-dev   (parallel with frontend)    max_turns: 30
      +-- auditor       (after all builders)        max_turns: 20
+     +-- adv-auditor   (after pattern audit)       max_turns: 20
      +-- deployer      (after audit PASS)          max_turns: 15
      +-- e2e-tester    (HARD GATE after deploy)    max_turns: 25
+     +-- adv-e2e-tester (after happy-path E2E)     max_turns: 25
      +-- ui-tester     (after e2e PASS)            max_turns: 20
         |  checkpoint after each agent + cost log
         v
@@ -291,8 +310,8 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v4.0.0)
-+-- agents/                      # 12 agent definitions (incl. cross-layer-validator)
+|   +-- plugin.json              # Plugin manifest (v5.0.0)
++-- agents/                      # 14 agent definitions (incl. adversarial auditor + tester)
 +-- commands/                    # 9 slash commands (incl. buidl-trace)
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
@@ -309,7 +328,7 @@ buidl/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 347 structural + functional + integration tests
++-- tests/                       # 419 structural + functional + integration tests
 ```
 
 ## Testing
@@ -318,7 +337,7 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-347 tests across 34 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, self-critique, incremental audit, dry-run mode, agent tracing, and dynamic re-planning.
+419 tests across 50 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
 
 Tests run automatically on every push and PR via GitHub Actions.
 
@@ -326,8 +345,11 @@ Tests run automatically on every push and PR via GitHub Actions.
 
 ## Version History
 
+### v5.0.0 — Audit Hardening (2026-03-13)
+Nine correctness, reliability, and coverage fixes from an external audit: **acceptance test locking** prevents builders from modifying verification criteria. **ABI-lock checkpoint** prevents frontend/backend drift. **Adversarial auditing** tests invariants with attack sequences. **Adversarial E2E testing** sends real edge-case transactions. **Failure diagnosis** classifies root causes when cycles are exhausted. **Findings ledger** tracks resolution and detects regressions. **Chain probe** fetches live gas parameters. **Cross-agent critique** replaces self-critique with independent verification. **Hard gate enforcement** ensures critical gates cannot be skipped.
+
 ### v4.0.0 — Agent Intelligence (2026-03-13)
-Five features that close gaps in the agent intelligence loop: **self-critique** catches spec drift before the reviewer does, saving entire review cycles. **Incremental audit** avoids re-scanning unchanged code on fix cycles. **Dry-run mode** lets you preview the execution plan before committing. **Execution tracing** provides full observability into agent dispatch ordering. **Dynamic re-planning** applies lessons from past failures automatically.
+Five features that close gaps in the agent intelligence loop: **self-critique** catches spec drift before the reviewer does (replaced by cross-agent critique in v5.0.0). **Incremental audit** avoids re-scanning unchanged code on fix cycles. **Dry-run mode** lets you preview the execution plan before committing. **Execution tracing** provides full observability into agent dispatch ordering. **Dynamic re-planning** applies lessons from past failures automatically.
 
 ### v3.6.0 — Smart Routing (2026-03-13)
 **Score-based finding routing** means the plugin doesn't just track which agents succeed — it uses that data to route findings to the agent most likely to fix them. **Project-type profiles** mean the 6th OP-20 token build starts with knowledge of what went wrong in the first 5.

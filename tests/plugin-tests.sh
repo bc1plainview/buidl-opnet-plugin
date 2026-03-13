@@ -1443,35 +1443,35 @@ rm -f "learning/profiles/$MOCK_TYPE.yaml"
 rm -rf "$FUNC_TMPDIR"
 
 # ─────────────────────────────────────────────────
-# Self-Critique
+# Cross-Critique (replaced Self-Critique in v5.0.0)
 # ─────────────────────────────────────────────────
 echo ""
-echo "=== Self-Critique ==="
+echo "=== Cross-Critique ==="
 
-# All 4 builder agents must have Self-Critique step
+# All 4 builder agents must have cross-critique note (self-critique removed)
+for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
+  if grep -qi 'cross-critique' "agents/$agent.md"; then
+    pass "$agent has cross-critique note"
+  else
+    fail "$agent MISSING cross-critique note"
+  fi
+done
+
+# All 4 builder agents must NOT have Self-Critique heading (removed in v5)
 for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
   if grep -q 'Self-Critique' "agents/$agent.md"; then
-    pass "$agent has Self-Critique step"
+    fail "$agent still has Self-Critique heading (should be removed)"
   else
-    fail "$agent MISSING Self-Critique step"
+    pass "$agent does not have Self-Critique heading (correctly removed)"
   fi
 done
 
-# All 4 builder agents must reference self-critique.md
-for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
-  if grep -q 'self-critique.md' "agents/$agent.md"; then
-    pass "$agent references self-critique.md artifact"
-  else
-    fail "$agent MISSING self-critique.md reference"
-  fi
-done
-
-# Self-Critique must reference requirements.md
+# Builder agents must still reference requirements.md (used in cross-critique via orchestrator)
 for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
   if grep -q 'requirements.md' "agents/$agent.md"; then
-    pass "$agent Self-Critique references requirements.md"
+    pass "$agent references requirements.md"
   else
-    fail "$agent Self-Critique MISSING requirements.md reference"
+    fail "$agent MISSING requirements.md reference"
   fi
 done
 
@@ -1810,30 +1810,517 @@ fi
 rm -rf "$QUERY_TMPDIR"
 
 # ─────────────────────────────────────────────────
-# Version 4.0.0 Consistency
+# Version 5.0.0 Consistency (TEST-13)
 # ─────────────────────────────────────────────────
 echo ""
-echo "=== Version 4.0.0 ==="
+echo "=== Version 5.0.0 ==="
 
-V4_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
-V4_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+V5_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
+V5_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 
-if [[ "$V4_PLUGIN" == "4.0.0" ]]; then
-  pass "plugin.json version is 4.0.0"
+if [[ "$V5_PLUGIN" == "5.0.0" ]]; then
+  pass "v5-plugin-json-version: plugin.json version is 5.0.0"
 else
-  fail "plugin.json version is NOT 4.0.0 (got: $V4_PLUGIN)"
+  fail "v5-plugin-json-version: plugin.json version is NOT 5.0.0 (got: $V5_PLUGIN)"
 fi
 
-if [[ "$V4_CHANGELOG" == "4.0.0" ]]; then
-  pass "CHANGELOG first entry is 4.0.0"
+if [[ "$V5_CHANGELOG" == "5.0.0" ]]; then
+  pass "v5-changelog-first-entry: CHANGELOG first entry is 5.0.0"
 else
-  fail "CHANGELOG first entry is NOT 4.0.0 (got: $V4_CHANGELOG)"
+  fail "v5-changelog-first-entry: CHANGELOG first entry is NOT 5.0.0 (got: $V5_CHANGELOG)"
 fi
 
-if [[ "$V4_PLUGIN" == "$V4_CHANGELOG" ]]; then
-  pass "plugin.json version matches CHANGELOG first entry"
+if [[ "$V5_PLUGIN" == "$V5_CHANGELOG" ]]; then
+  pass "v5-version-consistency: plugin.json version matches CHANGELOG first entry"
 else
-  fail "plugin.json ($V4_PLUGIN) does NOT match CHANGELOG ($V4_CHANGELOG)"
+  fail "v5-version-consistency: plugin.json ($V5_PLUGIN) does NOT match CHANGELOG ($V5_CHANGELOG)"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-1: Acceptance Test Locking
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Acceptance Test Locking ==="
+
+if grep -q 'acceptance-tests' commands/buidl.md; then
+  pass "v5-acceptance-test-in-buidl: commands/buidl.md contains acceptance-tests in Phase 2"
+else
+  fail "v5-acceptance-test-in-buidl: commands/buidl.md does NOT contain acceptance-tests"
+fi
+
+# Check Phase 2 specifically (between SPECIFY heading and EXPLORE heading)
+if sed -n '/PHASE 2/,/PHASE 3/p' commands/buidl.md | grep -q 'acceptance-tests'; then
+  pass "v5-acceptance-test-phase2: acceptance-tests appears in Phase 2 section"
+else
+  fail "v5-acceptance-test-phase2: acceptance-tests does NOT appear in Phase 2 section"
+fi
+
+for agent in agents/opnet-contract-dev.md agents/opnet-frontend-dev.md agents/opnet-backend-dev.md agents/loop-builder.md; do
+  agent_name=$(basename "$agent" .md)
+  if grep -q 'acceptance-tests' "$agent"; then
+    pass "v5-acceptance-test-forbidden-$agent_name: $agent_name has acceptance-tests FORBIDDEN rule"
+  else
+    fail "v5-acceptance-test-forbidden-$agent_name: $agent_name MISSING acceptance-tests FORBIDDEN rule"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# TEST-2: ABI-Lock
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== ABI-Lock ==="
+
+if grep -q 'abi_hash' commands/buidl.md; then
+  pass "v5-abi-lock-hash: commands/buidl.md contains abi_hash"
+else
+  fail "v5-abi-lock-hash: commands/buidl.md does NOT contain abi_hash"
+fi
+
+if grep -q 'abi_locked' commands/buidl.md; then
+  pass "v5-abi-lock-flag: commands/buidl.md contains abi_locked"
+else
+  fail "v5-abi-lock-flag: commands/buidl.md does NOT contain abi_locked"
+fi
+
+if grep -q 'shasum' commands/buidl.md; then
+  pass "v5-abi-lock-shasum: commands/buidl.md contains shasum"
+else
+  fail "v5-abi-lock-shasum: commands/buidl.md does NOT contain shasum"
+fi
+
+# Verify abi_hash appears between Step 2a and Step 2b
+if sed -n '/Step 2a/,/Step 2b/p' commands/buidl.md | grep -q 'abi_hash'; then
+  pass "v5-abi-lock-placement: abi_hash is between Step 2a and Step 2b"
+else
+  fail "v5-abi-lock-placement: abi_hash is NOT between Step 2a and Step 2b"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-3: Adversarial Auditor Agent
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Adversarial Auditor ==="
+
+if [[ -f agents/opnet-adversarial-auditor.md ]]; then
+  pass "v5-adversarial-auditor-exists: agents/opnet-adversarial-auditor.md exists"
+else
+  fail "v5-adversarial-auditor-exists: agents/opnet-adversarial-auditor.md MISSING"
+fi
+
+if grep -q 'Constraints' agents/opnet-adversarial-auditor.md 2>/dev/null; then
+  pass "v5-adversarial-auditor-constraints: has Constraints section"
+else
+  fail "v5-adversarial-auditor-constraints: MISSING Constraints section"
+fi
+
+if grep -q 'Process' agents/opnet-adversarial-auditor.md 2>/dev/null; then
+  pass "v5-adversarial-auditor-process: has Process section"
+else
+  fail "v5-adversarial-auditor-process: MISSING Process section"
+fi
+
+if grep -q 'Output' agents/opnet-adversarial-auditor.md 2>/dev/null; then
+  pass "v5-adversarial-auditor-output: has Output section"
+else
+  fail "v5-adversarial-auditor-output: MISSING Output section"
+fi
+
+if grep -q 'FORBIDDEN' agents/opnet-adversarial-auditor.md 2>/dev/null; then
+  pass "v5-adversarial-auditor-forbidden: has FORBIDDEN section"
+else
+  fail "v5-adversarial-auditor-forbidden: MISSING FORBIDDEN section"
+fi
+
+if grep -q 'invariant' agents/opnet-adversarial-auditor.md 2>/dev/null; then
+  pass "v5-adversarial-auditor-invariant: references invariant"
+else
+  fail "v5-adversarial-auditor-invariant: does NOT reference invariant"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-4: Adversarial Audit Dispatch
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Adversarial Audit Dispatch ==="
+
+if grep -q 'adversarial-auditor' commands/buidl.md; then
+  pass "v5-adversarial-audit-dispatch-ref: commands/buidl.md contains adversarial-auditor"
+else
+  fail "v5-adversarial-audit-dispatch-ref: commands/buidl.md does NOT contain adversarial-auditor"
+fi
+
+if grep -q 'adversarial-findings' commands/buidl.md; then
+  pass "v5-adversarial-audit-findings-ref: commands/buidl.md contains adversarial-findings"
+else
+  fail "v5-adversarial-audit-findings-ref: commands/buidl.md does NOT contain adversarial-findings"
+fi
+
+# Verify placement: Step 2c.5 appears after Step 2c and before Step 2d
+if grep -q 'Step 2c.5' commands/buidl.md; then
+  pass "v5-adversarial-audit-step-label: commands/buidl.md contains Step 2c.5"
+else
+  fail "v5-adversarial-audit-step-label: commands/buidl.md does NOT contain Step 2c.5"
+fi
+
+if sed -n '/Step 2c.*Security Audit/,/Step 2d/p' commands/buidl.md | grep -q 'adversarial'; then
+  pass "v5-adversarial-audit-placement: adversarial audit is between Step 2c and Step 2d"
+else
+  fail "v5-adversarial-audit-placement: adversarial audit is NOT between Step 2c and Step 2d"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-5: Failure Diagnosis
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Failure Diagnosis ==="
+
+if grep -q 'failure-diagnosis.md' commands/buidl.md; then
+  pass "v5-failure-diagnosis-ref: commands/buidl.md contains failure-diagnosis.md"
+else
+  fail "v5-failure-diagnosis-ref: commands/buidl.md does NOT contain failure-diagnosis.md"
+fi
+
+if grep -q 'spec_problem' commands/buidl.md; then
+  pass "v5-failure-diagnosis-spec: contains spec_problem classification"
+else
+  fail "v5-failure-diagnosis-spec: MISSING spec_problem classification"
+fi
+
+if grep -q 'implementation_problem' commands/buidl.md; then
+  pass "v5-failure-diagnosis-impl: contains implementation_problem classification"
+else
+  fail "v5-failure-diagnosis-impl: MISSING implementation_problem classification"
+fi
+
+if grep -q 'test_problem' commands/buidl.md; then
+  pass "v5-failure-diagnosis-test: contains test_problem classification"
+else
+  fail "v5-failure-diagnosis-test: MISSING test_problem classification"
+fi
+
+if grep -q 'infrastructure_problem' commands/buidl.md; then
+  pass "v5-failure-diagnosis-infra: contains infrastructure_problem classification"
+else
+  fail "v5-failure-diagnosis-infra: MISSING infrastructure_problem classification"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-6: Findings Ledger
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Findings Ledger ==="
+
+if grep -q 'findings-ledger.md' commands/buidl.md; then
+  pass "v5-findings-ledger-buidl: commands/buidl.md contains findings-ledger.md"
+else
+  fail "v5-findings-ledger-buidl: commands/buidl.md does NOT contain findings-ledger.md"
+fi
+
+if grep -q 'REGRESSION' commands/buidl.md; then
+  pass "v5-findings-ledger-regression-buidl: commands/buidl.md contains REGRESSION"
+else
+  fail "v5-findings-ledger-regression-buidl: commands/buidl.md does NOT contain REGRESSION"
+fi
+
+if grep -q 'Regression Check' agents/loop-reviewer.md; then
+  pass "v5-findings-ledger-reviewer-section: loop-reviewer.md contains Regression Check section"
+else
+  fail "v5-findings-ledger-reviewer-section: loop-reviewer.md MISSING Regression Check section"
+fi
+
+if grep -q 'REGRESSION' agents/loop-reviewer.md; then
+  pass "v5-findings-ledger-reviewer-regression: loop-reviewer.md contains REGRESSION"
+else
+  fail "v5-findings-ledger-reviewer-regression: loop-reviewer.md does NOT contain REGRESSION"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-7: Chain Probe
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Chain Probe ==="
+
+if [[ -f scripts/chain-probe.sh ]]; then
+  pass "v5-chain-probe-exists: scripts/chain-probe.sh exists"
+else
+  fail "v5-chain-probe-exists: scripts/chain-probe.sh MISSING"
+fi
+
+check "v5-chain-probe-syntax: chain-probe.sh passes bash -n" bash -n scripts/chain-probe.sh
+
+if [[ -x scripts/chain-probe.sh ]]; then
+  pass "v5-chain-probe-executable: chain-probe.sh is executable"
+else
+  fail "v5-chain-probe-executable: chain-probe.sh is NOT executable"
+fi
+
+if grep -q 'gas' scripts/chain-probe.sh; then
+  pass "v5-chain-probe-gas: chain-probe.sh references gas"
+else
+  fail "v5-chain-probe-gas: chain-probe.sh does NOT reference gas"
+fi
+
+if grep -q 'block' scripts/chain-probe.sh; then
+  pass "v5-chain-probe-block: chain-probe.sh references block"
+else
+  fail "v5-chain-probe-block: chain-probe.sh does NOT reference block"
+fi
+
+if grep -q 'probe_status' scripts/chain-probe.sh; then
+  pass "v5-chain-probe-status: chain-probe.sh references probe_status"
+else
+  fail "v5-chain-probe-status: chain-probe.sh does NOT reference probe_status"
+fi
+
+if grep -q 'chain-probe' commands/buidl.md; then
+  pass "v5-chain-probe-buidl-ref: commands/buidl.md references chain-probe"
+else
+  fail "v5-chain-probe-buidl-ref: commands/buidl.md does NOT reference chain-probe"
+fi
+
+# Verify it's in Phase 2
+if sed -n '/PHASE 2/,/PHASE 3/p' commands/buidl.md | grep -q 'chain-probe'; then
+  pass "v5-chain-probe-phase2: chain-probe is referenced in Phase 2"
+else
+  fail "v5-chain-probe-phase2: chain-probe is NOT referenced in Phase 2"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-8: Adversarial E2E Tester Agent
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Adversarial E2E Tester ==="
+
+if [[ -f agents/opnet-adversarial-tester.md ]]; then
+  pass "v5-adversarial-tester-exists: agents/opnet-adversarial-tester.md exists"
+else
+  fail "v5-adversarial-tester-exists: agents/opnet-adversarial-tester.md MISSING"
+fi
+
+if grep -q 'Constraints' agents/opnet-adversarial-tester.md 2>/dev/null; then
+  pass "v5-adversarial-tester-constraints: has Constraints section"
+else
+  fail "v5-adversarial-tester-constraints: MISSING Constraints section"
+fi
+
+if grep -q 'FORBIDDEN' agents/opnet-adversarial-tester.md 2>/dev/null; then
+  pass "v5-adversarial-tester-forbidden: has FORBIDDEN section"
+else
+  fail "v5-adversarial-tester-forbidden: MISSING FORBIDDEN section"
+fi
+
+if grep -q 'boundary' agents/opnet-adversarial-tester.md 2>/dev/null; then
+  pass "v5-adversarial-tester-boundary: references boundary"
+else
+  fail "v5-adversarial-tester-boundary: does NOT reference boundary"
+fi
+
+if grep -q 'revert' agents/opnet-adversarial-tester.md 2>/dev/null; then
+  pass "v5-adversarial-tester-revert: references revert"
+else
+  fail "v5-adversarial-tester-revert: does NOT reference revert"
+fi
+
+if grep -qi 'race condition' agents/opnet-adversarial-tester.md 2>/dev/null; then
+  pass "v5-adversarial-tester-race: references race condition"
+else
+  fail "v5-adversarial-tester-race: does NOT reference race condition"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-9: Adversarial E2E Dispatch
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Adversarial E2E Dispatch ==="
+
+if grep -q 'adversarial-tester' commands/buidl.md; then
+  pass "v5-adversarial-e2e-dispatch-ref: commands/buidl.md contains adversarial-tester"
+else
+  fail "v5-adversarial-e2e-dispatch-ref: commands/buidl.md does NOT contain adversarial-tester"
+fi
+
+if grep -q 'adversarial-e2e-results' commands/buidl.md; then
+  pass "v5-adversarial-e2e-results-ref: commands/buidl.md contains adversarial-e2e-results"
+else
+  fail "v5-adversarial-e2e-results-ref: commands/buidl.md does NOT contain adversarial-e2e-results"
+fi
+
+# Verify placement: Step 2e.5 appears between Step 2e and Step 2f
+if grep -q 'Step 2e.5' commands/buidl.md; then
+  pass "v5-adversarial-e2e-step-label: commands/buidl.md contains Step 2e.5"
+else
+  fail "v5-adversarial-e2e-step-label: commands/buidl.md does NOT contain Step 2e.5"
+fi
+
+if sed -n '/Step 2e:/,/Step 2f:/p' commands/buidl.md | grep -q 'adversarial'; then
+  pass "v5-adversarial-e2e-placement: adversarial E2E is between Step 2e and Step 2f"
+else
+  fail "v5-adversarial-e2e-placement: adversarial E2E is NOT between Step 2e and Step 2f"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-10: Cross-Critique
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Cross-Critique ==="
+
+if grep -q 'cross-critique' commands/buidl.md; then
+  pass "v5-cross-critique-buidl: commands/buidl.md contains cross-critique"
+else
+  fail "v5-cross-critique-buidl: commands/buidl.md does NOT contain cross-critique"
+fi
+
+if grep -qi 'critique mode' commands/buidl.md; then
+  pass "v5-critique-mode-buidl: commands/buidl.md contains critique mode"
+else
+  fail "v5-critique-mode-buidl: commands/buidl.md does NOT contain critique mode"
+fi
+
+# Verify no self-critique heading in builder agents
+for agent in agents/opnet-contract-dev.md agents/opnet-frontend-dev.md agents/opnet-backend-dev.md agents/loop-builder.md; do
+  agent_name=$(basename "$agent" .md)
+  if grep -q 'Self-Critique' "$agent"; then
+    fail "v5-no-self-critique-$agent_name: $agent_name still contains Self-Critique step heading"
+  else
+    pass "v5-no-self-critique-$agent_name: $agent_name does NOT contain Self-Critique heading"
+  fi
+done
+
+if grep -qi 'Critique Mode' agents/loop-reviewer.md; then
+  pass "v5-critique-mode-reviewer: loop-reviewer.md contains Critique Mode section"
+else
+  fail "v5-critique-mode-reviewer: loop-reviewer.md MISSING Critique Mode section"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-11: Hard Gates
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Hard Gates ==="
+
+if grep -q 'SOFT' commands/buidl.md; then
+  pass "v5-hard-gates-soft: commands/buidl.md contains SOFT gate classification"
+else
+  fail "v5-hard-gates-soft: commands/buidl.md does NOT contain SOFT gate classification"
+fi
+
+if grep -q 'HARD' commands/buidl.md; then
+  pass "v5-hard-gates-hard: commands/buidl.md contains HARD gate classification"
+else
+  fail "v5-hard-gates-hard: commands/buidl.md does NOT contain HARD gate classification"
+fi
+
+# Verify hard gates run when --skip-challenge is set
+if grep -q 'skip-challenge' commands/buidl.md && grep -q 'hard gate' commands/buidl.md; then
+  pass "v5-hard-gates-skip-logic: commands/buidl.md has logic for hard gates with --skip-challenge"
+else
+  fail "v5-hard-gates-skip-logic: commands/buidl.md MISSING hard gate logic with --skip-challenge"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-12: State Guard Coverage
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== State Guard Coverage ==="
+
+for hookfile in hooks/scripts/stop-hook.sh hooks/scripts/guard-state.sh hooks/scripts/guard-state-bash.sh; do
+  hook_name=$(basename "$hookfile" .sh)
+  if grep -q 'adversarial_auditing' "$hookfile"; then
+    pass "v5-guard-adversarial-auditing-$hook_name: $hook_name contains adversarial_auditing"
+  else
+    fail "v5-guard-adversarial-auditing-$hook_name: $hook_name MISSING adversarial_auditing"
+  fi
+  if grep -q 'adversarial_testing' "$hookfile"; then
+    pass "v5-guard-adversarial-testing-$hook_name: $hook_name contains adversarial_testing"
+  else
+    fail "v5-guard-adversarial-testing-$hook_name: $hook_name MISSING adversarial_testing"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# TEST-14: Agent Count
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Agent Count ==="
+
+if grep -q '14' README.md; then
+  pass "v5-agent-count-14: README references 14 agents"
+else
+  fail "v5-agent-count-14: README does NOT reference 14 agents"
+fi
+
+if grep -q 'adversarial-auditor' README.md; then
+  pass "v5-agent-table-auditor: README agent table includes adversarial-auditor"
+else
+  fail "v5-agent-table-auditor: README agent table MISSING adversarial-auditor"
+fi
+
+if grep -q 'adversarial-tester' README.md; then
+  pass "v5-agent-table-tester: README agent table includes adversarial-tester"
+else
+  fail "v5-agent-table-tester: README agent table MISSING adversarial-tester"
+fi
+
+# ─────────────────────────────────────────────────
+# TEST-15: Functional — Chain Probe Graceful Failure
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Chain Probe Functional ==="
+
+PROBE_TMPDIR=$(mktemp -d)
+
+# Test with invalid RPC URL — should exit 0 with probe_status=failed
+bash scripts/chain-probe.sh "$PROBE_TMPDIR" "http://invalid-rpc-that-does-not-exist.example.com:1234" >/dev/null 2>&1
+PROBE_EXIT=$?
+
+if [[ "$PROBE_EXIT" -eq 0 ]]; then
+  pass "v5-chain-probe-graceful-exit: chain-probe.sh exits 0 on invalid RPC"
+else
+  fail "v5-chain-probe-graceful-exit: chain-probe.sh exits $PROBE_EXIT on invalid RPC (expected 0)"
+fi
+
+if [[ -f "$PROBE_TMPDIR/chain-state.json" ]]; then
+  PROBE_STATUS=$(python3 -c "import json; print(json.load(open('$PROBE_TMPDIR/chain-state.json')).get('probe_status',''))" 2>/dev/null || echo "")
+  if [[ "$PROBE_STATUS" == "failed" ]]; then
+    pass "v5-chain-probe-graceful-status: probe_status is failed on invalid RPC"
+  else
+    fail "v5-chain-probe-graceful-status: probe_status is '$PROBE_STATUS' (expected 'failed')"
+  fi
+else
+  fail "v5-chain-probe-graceful-output: chain-state.json was NOT created"
+fi
+
+rm -rf "$PROBE_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# TEST-16: Findings Ledger Format
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Findings Ledger Format ==="
+
+# Verify pipe-delimited table format in buidl.md
+if grep -q '| ID |' commands/buidl.md && grep -q '| Cycle Found |' commands/buidl.md; then
+  pass "v5-findings-ledger-table-headers: findings ledger has pipe-delimited table with ID and Cycle Found"
+else
+  fail "v5-findings-ledger-table-headers: findings ledger MISSING pipe-delimited table headers"
+fi
+
+if grep -q '| Cycle Resolved |' commands/buidl.md; then
+  pass "v5-findings-ledger-resolved-col: findings ledger table has Cycle Resolved column"
+else
+  fail "v5-findings-ledger-resolved-col: findings ledger table MISSING Cycle Resolved column"
+fi
+
+if grep -q '| Status |' commands/buidl.md && grep -q '| Finding |' commands/buidl.md; then
+  pass "v5-findings-ledger-status-finding-cols: findings ledger table has Status and Finding columns"
+else
+  fail "v5-findings-ledger-status-finding-cols: findings ledger table MISSING Status or Finding columns"
+fi
+
+if grep -q '| File |' commands/buidl.md && grep -q '| Agent |' commands/buidl.md; then
+  pass "v5-findings-ledger-file-agent-cols: findings ledger table has File and Agent columns"
+else
+  fail "v5-findings-ledger-file-agent-cols: findings ledger table MISSING File or Agent columns"
 fi
 
 # ─────────────────────────────────────────────────
