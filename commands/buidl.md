@@ -76,6 +76,10 @@ Create `.claude/loop/sessions/<name>/cost-ledger.md`:
 |-----------|-------|-------|--------|------------|
 ```
 
+### Initialize Decisions Register
+
+Create `.claude/loop/sessions/<name>/decisions.md` using the template at `${CLAUDE_PLUGIN_ROOT}/templates/decisions.md`. This is an append-only log of architectural and pattern decisions made during the session. Agents append to it; the orchestrator and reviewer read it.
+
 ## Checkpoint Protocol
 
 After every phase transition, write `.claude/loop/sessions/<name>/checkpoint.md`:
@@ -459,6 +463,9 @@ You are working in: [WORKTREE_PATH]
 
 ## Knowledge
 Read your knowledge file FIRST: ${CLAUDE_PLUGIN_ROOT}/knowledge/slices/[agent-slice].md
+
+## Problem-Solving Discipline
+Read the PUA methodology: ${CLAUDE_PLUGIN_ROOT}/skills/pua/SKILL.md — this governs your debugging, escalation, and proactivity standards.
 
 ## Lessons from Past Sessions
 [Include relevant lessons from learning/ retrospectives, if any]

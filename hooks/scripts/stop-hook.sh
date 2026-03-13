@@ -125,6 +125,47 @@ if [[ -n "$LATEST_REVIEW" && -f "$LATEST_REVIEW" ]]; then
   FINDINGS=$(cat "$LATEST_REVIEW")
 fi
 
+# ── PUA Pressure Escalation ──
+# Escalate requirements based on cycle number
+PRESSURE_SECTION=""
+case "$NEW_CYCLE" in
+  2)
+    PRESSURE_SECTION="
+PUA PRESSURE LEVEL: L2 — ELEVATED
+You failed the previous cycle. Before fixing anything:
+1. Read the PUA skill (skills/pua/SKILL.md) if you haven't already.
+2. For EACH finding: search the complete error context + read relevant source code.
+3. List 3 fundamentally different hypotheses for each issue before implementing fixes.
+4. Do NOT repeat the same approach that failed. Switch to a fundamentally different solution.
+5. After fixing, run the proactivity checklist: verify fix, check similar issues, check upstream/downstream.
+"
+    ;;
+  3)
+    PRESSURE_SECTION="
+PUA PRESSURE LEVEL: L3 — MANDATORY CHECKLIST
+You have failed $CYCLE cycles. Before attempting ANY fix, you MUST complete the 7-Point Checklist for EACH finding:
+- [ ] Read failure signals word by word
+- [ ] Proactive search (error text, docs, multi-angle keywords)
+- [ ] Read raw material (50 lines of context around the failure)
+- [ ] Verify all underlying assumptions with tools
+- [ ] Invert assumptions (try the opposite hypothesis)
+- [ ] Minimal isolation (reproduce in smallest possible scope)
+- [ ] Change direction (switch tools, methods, frameworks — not parameters)
+
+Report checklist completion for each finding in your response.
+If the same approach failed twice, you MUST use a fundamentally different technique.
+"
+    ;;
+  *)
+    PRESSURE_SECTION="
+PUA PRESSURE LEVEL: L4 — LAST CHANCE
+This is cycle $NEW_CYCLE of $MAX_CYCLES. Complete the 7-Point Checklist for every finding.
+Consider: minimal PoC in isolated scope, completely different tech approach, or structured failure report.
+If genuinely unsolvable after exhausting the checklist, provide a structured failure report (verified facts, eliminated possibilities, narrowed scope, recommended next directions).
+"
+    ;;
+esac
+
 WORKTREE_PATH=$(grep '^worktree_path:' "$STATE_FILE" | head -1 | sed 's/^worktree_path: //')
 
 # Check for open issues from previous cycle
@@ -154,7 +195,7 @@ Re-dispatch limit: 2 cycles per agent pair. If limit reached, defer to auditor.
   fi
 
   PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES (OPNet Multi-Agent).
-
+${PRESSURE_SECTION}
 The reviewer found issues in the previous cycle. Route each finding to the responsible specialist agent:
 - Contract issues → opnet-contract-dev
 - Frontend issues → opnet-frontend-dev
@@ -182,7 +223,7 @@ Steps:
 else
   # Legacy single-builder continuation
   PROMPT="The Loop: Build cycle $NEW_CYCLE of $MAX_CYCLES.
-
+${PRESSURE_SECTION}
 The reviewer found issues in the previous cycle. Address each finding below, then re-run the full verify pipeline (lint, typecheck, build, test). When everything passes, commit, push, and update the PR.
 
 Work in the worktree at: $WORKTREE_PATH
