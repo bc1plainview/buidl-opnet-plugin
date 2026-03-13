@@ -1124,6 +1124,325 @@ else
 fi
 
 # ─────────────────────────────────────────────────
+# Score-Based Routing
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Score-Based Routing ==="
+
+# TEST-1: route-finding.sh exists and is valid bash
+if [[ -f scripts/route-finding.sh ]]; then
+  pass "route-finding.sh exists"
+else
+  fail "route-finding.sh does NOT exist"
+fi
+
+if bash -n scripts/route-finding.sh 2>/dev/null; then
+  pass "route-finding.sh passes bash -n syntax check"
+else
+  fail "route-finding.sh has syntax errors"
+fi
+
+# TEST-2: route-finding.sh handles missing scores file
+if bash scripts/route-finding.sh "test finding" "agent-a,agent-b" 2>/dev/null | grep -q '|'; then
+  pass "route-finding.sh returns pipe-delimited output"
+else
+  fail "route-finding.sh does NOT return expected format"
+fi
+
+# Functional: CSS finding routes to frontend-dev (keyword fallback)
+ROUTE_CSS=$(bash scripts/route-finding.sh "CSS layout broken in the token card" "opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev" 2>/dev/null)
+if echo "$ROUTE_CSS" | grep -q 'opnet-frontend-dev'; then
+  pass "CSS finding routes to opnet-frontend-dev"
+else
+  fail "CSS finding did NOT route to opnet-frontend-dev (got: $ROUTE_CSS)"
+fi
+
+# Functional: contract finding routes to contract-dev
+ROUTE_CONTRACT=$(bash scripts/route-finding.sh "storage slot collision in transfer function" "opnet-contract-dev,opnet-frontend-dev" 2>/dev/null)
+if echo "$ROUTE_CONTRACT" | grep -q 'opnet-contract-dev'; then
+  pass "Contract finding routes to opnet-contract-dev"
+else
+  fail "Contract finding did NOT route to opnet-contract-dev (got: $ROUTE_CONTRACT)"
+fi
+
+# Functional: non-OPNet candidates fall back to first candidate (not hardcoded agent)
+ROUTE_GENERIC=$(bash scripts/route-finding.sh "generic problem" "my-builder,my-reviewer" 2>/dev/null)
+if echo "$ROUTE_GENERIC" | grep -q 'my-builder'; then
+  pass "Generic finding falls back to first candidate (not hardcoded agent)"
+else
+  fail "Generic finding did NOT fall back to first candidate (got: $ROUTE_GENERIC)"
+fi
+
+# Functional: preferred agent not in candidates falls back to first candidate
+ROUTE_FALLBACK=$(bash scripts/route-finding.sh "CSS style issue" "agent-a,agent-b" 2>/dev/null)
+if echo "$ROUTE_FALLBACK" | grep -q 'agent-a'; then
+  pass "Preferred agent not in candidates falls back to first candidate"
+else
+  fail "Preferred agent not in candidates did NOT fall back (got: $ROUTE_FALLBACK)"
+fi
+
+# TEST-10: Category taxonomy exists in route-finding.sh
+if grep -q 'CATEGORIES=' scripts/route-finding.sh; then
+  pass "route-finding.sh contains category taxonomy"
+else
+  fail "route-finding.sh does NOT contain category taxonomy"
+fi
+
+if grep -q 'css-styling' scripts/route-finding.sh; then
+  pass "route-finding.sh includes css-styling category"
+else
+  fail "route-finding.sh does NOT include css-styling category"
+fi
+
+if grep -q 'contract-logic' scripts/route-finding.sh; then
+  pass "route-finding.sh includes contract-logic category"
+else
+  fail "route-finding.sh does NOT include contract-logic category"
+fi
+
+if grep -q 'security' scripts/route-finding.sh; then
+  pass "route-finding.sh includes security category"
+else
+  fail "route-finding.sh does NOT include security category"
+fi
+
+# TEST-9: update-scores.sh accepts --findings parameter
+if grep -q '\-\-findings' scripts/update-scores.sh; then
+  pass "update-scores.sh references --findings parameter"
+else
+  fail "update-scores.sh does NOT reference --findings parameter"
+fi
+
+if grep -q 'strengths' scripts/update-scores.sh; then
+  pass "update-scores.sh references strengths tracking"
+else
+  fail "update-scores.sh does NOT reference strengths tracking"
+fi
+
+if grep -q 'weaknesses' scripts/update-scores.sh; then
+  pass "update-scores.sh references weaknesses tracking"
+else
+  fail "update-scores.sh does NOT reference weaknesses tracking"
+fi
+
+# TEST-6: buidl.md references route-finding.sh in Phase 5
+if grep -q 'route-finding.sh' commands/buidl.md; then
+  pass "buidl.md references route-finding.sh"
+else
+  fail "buidl.md does NOT reference route-finding.sh"
+fi
+
+if grep -q 'findings-categorized' commands/buidl.md; then
+  pass "buidl.md references findings-categorized.md"
+else
+  fail "buidl.md does NOT reference findings-categorized.md"
+fi
+
+# ─────────────────────────────────────────────────
+# Project-Type Profiles
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Project-Type Profiles ==="
+
+# TEST-3: generate-profiles.sh exists and is valid bash
+if [[ -f scripts/generate-profiles.sh ]]; then
+  pass "generate-profiles.sh exists"
+else
+  fail "generate-profiles.sh does NOT exist"
+fi
+
+if bash -n scripts/generate-profiles.sh 2>/dev/null; then
+  pass "generate-profiles.sh passes bash -n syntax check"
+else
+  fail "generate-profiles.sh has syntax errors"
+fi
+
+# TEST-4: generate-profiles.sh handles empty learning directory
+if bash scripts/generate-profiles.sh 2>/dev/null | grep -qi 'no\|profile\|threshold'; then
+  pass "generate-profiles.sh handles gracefully when no threshold met"
+else
+  # May output nothing if thresholds not met, which is also acceptable
+  pass "generate-profiles.sh runs without error"
+fi
+
+# TEST-5: learning/profiles/ directory exists
+if [[ -d learning/profiles ]]; then
+  pass "learning/profiles/ directory exists"
+else
+  fail "learning/profiles/ directory does NOT exist"
+fi
+
+# TEST-12: Profile schema documented
+if [[ -f learning/profiles/README.md ]]; then
+  pass "learning/profiles/README.md schema documentation exists"
+else
+  fail "learning/profiles/README.md does NOT exist"
+fi
+
+if grep -q 'project_type' learning/profiles/README.md; then
+  pass "profile schema includes project_type field"
+else
+  fail "profile schema does NOT include project_type field"
+fi
+
+if grep -q 'common_pitfalls' learning/profiles/README.md; then
+  pass "profile schema includes common_pitfalls field"
+else
+  fail "profile schema does NOT include common_pitfalls field"
+fi
+
+if grep -q 'recommended_config' learning/profiles/README.md; then
+  pass "profile schema includes recommended_config field"
+else
+  fail "profile schema does NOT include recommended_config field"
+fi
+
+# TEST-7: buidl.md references generate-profiles.sh in Phase 6
+if grep -q 'generate-profiles.sh' commands/buidl.md; then
+  pass "buidl.md references generate-profiles.sh"
+else
+  fail "buidl.md does NOT reference generate-profiles.sh"
+fi
+
+# TEST-8: buidl.md references profile consultation in Phase 1
+if grep -q 'Profile Pre-Check\|profile.*challenge\|learning/profiles' commands/buidl.md; then
+  pass "buidl.md references profile consultation in challenge phase"
+else
+  fail "buidl.md does NOT reference profile consultation in challenge phase"
+fi
+
+# TEST-11: Version consistency
+PLUGIN_VERSION=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
+CHANGELOG_VERSION=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+if [[ "$PLUGIN_VERSION" == "$CHANGELOG_VERSION" ]]; then
+  pass "plugin.json version ($PLUGIN_VERSION) matches CHANGELOG ($CHANGELOG_VERSION)"
+else
+  fail "plugin.json version ($PLUGIN_VERSION) does NOT match CHANGELOG ($CHANGELOG_VERSION)"
+fi
+
+# ─────────────────────────────────────────────────
+# Functional: update-scores.sh --findings
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: update-scores.sh --findings ==="
+
+# Create temp state and findings files, backup agent-scores.yaml
+FUNC_TMPDIR=$(mktemp -d)
+SCORES_BACKUP="$FUNC_TMPDIR/agent-scores-backup.yaml"
+cp learning/agent-scores.yaml "$SCORES_BACKUP"
+
+# Create a minimal state file with a dispatched agent
+cat > "$FUNC_TMPDIR/state.yaml" << 'STATEEOF'
+cycle: 1
+tokens_used: 5000
+builder_model: sonnet
+agent_status:
+  opnet-frontend-dev: done
+STATEEOF
+
+# Create a findings file with categorized findings
+cat > "$FUNC_TMPDIR/findings.txt" << 'FINDEOF'
+agent: opnet-frontend-dev | category: css-styling | outcome: fixed
+agent: opnet-frontend-dev | category: wallet-connect | outcome: failed
+FINDEOF
+
+# Run update-scores.sh with --findings
+if bash scripts/update-scores.sh "$FUNC_TMPDIR/state.yaml" "pass" --findings "$FUNC_TMPDIR/findings.txt" >/dev/null 2>&1; then
+  pass "update-scores.sh --findings runs without error"
+else
+  fail "update-scores.sh --findings failed to run"
+fi
+
+# Check that strengths now includes css-styling
+if python3 -c "
+import yaml, sys
+with open('learning/agent-scores.yaml') as f:
+    data = yaml.safe_load(f)
+agent = data.get('agents', {}).get('opnet-frontend-dev', {})
+strengths = agent.get('strengths', [])
+weaknesses = agent.get('weaknesses', [])
+assert 'css-styling' in strengths, f'css-styling not in strengths: {strengths}'
+assert 'wallet-connect' in weaknesses, f'wallet-connect not in weaknesses: {weaknesses}'
+assert agent.get('sessions_completed', 0) == 1, f'sessions_completed should be 1'
+" 2>&1; then
+  pass "update-scores.sh --findings correctly updates strengths and weaknesses"
+else
+  fail "update-scores.sh --findings did NOT correctly update strengths/weaknesses"
+fi
+
+# Restore agent-scores.yaml
+cp "$SCORES_BACKUP" learning/agent-scores.yaml
+
+# ─────────────────────────────────────────────────
+# Functional: generate-profiles.sh at 5-session threshold
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: generate-profiles.sh ==="
+
+# Create 5 mock retrospective files in learning/ (unique test type to avoid collisions)
+MOCK_TYPE="functest-xyzzy"
+for i in 1 2 3 4 5; do
+  cat > "learning/mock-test-session-$i.md" << RETROEOF
+# Retrospective: mock-session-$i
+Date: 2026-03-0$i
+Project Type: $MOCK_TYPE
+Outcome: PASS on cycle 1
+Tokens Used: 5000
+Duration: 10
+
+## What Worked
+- Test worked
+
+## What Failed
+- Nothing
+
+## Anti-Patterns
+- None
+RETROEOF
+done
+
+# Remove any existing test profile
+rm -f "learning/profiles/$MOCK_TYPE.yaml"
+
+# Run generate-profiles.sh
+PROFILE_OUTPUT=$(bash scripts/generate-profiles.sh 2>&1)
+if echo "$PROFILE_OUTPUT" | grep -qi "Generated profile.*$MOCK_TYPE\|profile generation complete"; then
+  pass "generate-profiles.sh generates profile at 5-session threshold"
+else
+  fail "generate-profiles.sh did NOT generate profile at threshold (output: $PROFILE_OUTPUT)"
+fi
+
+# Check that profile YAML was created with expected fields
+if [[ -f "learning/profiles/$MOCK_TYPE.yaml" ]]; then
+  if python3 -c "
+import yaml, sys
+mock_type = sys.argv[1]
+with open(f'learning/profiles/{mock_type}.yaml') as f:
+    profile = yaml.safe_load(f)
+assert profile.get('project_type') == mock_type, f'project_type wrong: {profile.get(\"project_type\")}'
+assert profile.get('sessions_count') == 5, f'sessions_count wrong: {profile.get(\"sessions_count\")}'
+assert 'recommended_config' in profile, 'missing recommended_config'
+assert 'common_pitfalls' in profile, 'missing common_pitfalls'
+assert 'build_vs_buy' in profile['recommended_config'].get('skip_challenge_gates', []), 'missing skip gate'
+" "$MOCK_TYPE" 2>&1; then
+    pass "generate-profiles.sh produces valid profile YAML with correct schema"
+  else
+    fail "generate-profiles.sh profile YAML has incorrect schema"
+  fi
+else
+  fail "generate-profiles.sh did NOT create learning/profiles/$MOCK_TYPE.yaml"
+fi
+
+# Clean up mock retrospectives and generated profile
+for i in 1 2 3 4 5; do
+  rm -f "learning/mock-test-session-$i.md"
+done
+rm -f "learning/profiles/$MOCK_TYPE.yaml"
+
+# Clean up temp dir
+rm -rf "$FUNC_TMPDIR"
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 echo ""

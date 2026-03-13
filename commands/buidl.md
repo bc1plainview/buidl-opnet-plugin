@@ -129,12 +129,13 @@ Before dispatching builders, consult the adaptive learning system:
 3. For each matching pattern, include its `description` and `fix` in the relevant agent's dispatch prompt.
 4. Patterns with `promoted_to_knowledge: true` are already in knowledge slices — no need to duplicate.
 
-### Step 0b: Agent Performance Scores
+### Step 0b: Agent Performance Scores + Routing Preparation
 1. Read `${CLAUDE_PLUGIN_ROOT}/learning/agent-scores.yaml`.
 2. For each agent to be dispatched, check:
-   - If `sessions_completed >= 5`: include success rate and weakness areas in the dispatch prompt.
+   - If `sessions_completed >= 5`: include success rate, strengths, and weaknesses in the dispatch prompt.
    - If `success_rate < 0.5` and `sessions_completed >= 5`: suggest model upgrade to user ("frontend-dev has a 40% success rate on Sonnet — consider using `--builder-model opus`").
 3. Agent scores are informational — do not auto-switch models without user approval.
+4. Note agent strengths and weaknesses for use in finding routing (Phase 5). The `route-finding.sh` script will use these to make smarter routing decisions when the reviewer returns findings.
 
 ### Step 0c: Retrospectives (existing)
 1. List all `.md` files in `${CLAUDE_PLUGIN_ROOT}/learning/` directory.
@@ -148,6 +149,15 @@ Before dispatching builders, consult the adaptive learning system:
    - Include the template path in the agent dispatch prompt with instruction: "Clone from this template and customize according to the spec. Do NOT modify the template files themselves."
 3. This is advisory — agents may choose to build from scratch if the template doesn't fit.
 
+### Step 0e: Project-Type Profiles
+1. Check `${CLAUDE_PLUGIN_ROOT}/learning/profiles/` for a YAML file matching the detected project type.
+2. If a matching profile exists (e.g., `op20-token.yaml`):
+   - Read the profile and extract `common_pitfalls` and `recommended_config`.
+   - Include common pitfalls in ALL agent dispatch prompts as "Known pitfalls for this project type."
+   - If the profile recommends a builder model different from the current setting, mention it to the user (advisory only).
+   - If `skip_challenge_gates` is non-empty, note these for Phase 1 (the orchestrator already offered to skip during challenge).
+3. Profile data is advisory — do not auto-apply recommended config without user approval.
+
 All steps are advisory — do not block on missing data.
 
 ---
@@ -157,6 +167,19 @@ All steps are advisory — do not block on missing data.
 **Goal:** Turn a vague idea into a concrete, challenged set of requirements.
 
 Update state: `current_phase: challenge`, `status: challenging`
+
+### Profile Pre-Check
+
+Before running the gates, check for an existing project-type profile:
+1. If the idea text mentions a known project type (e.g., "OP-20", "token", "NFT", "marketplace"):
+   - Check `${CLAUDE_PLUGIN_ROOT}/learning/profiles/` for a matching profile YAML.
+   - If found with `sessions_count >= 5`:
+     - Present: "Based on [N] previous [type] builds, here are the common pitfalls: [list from common_pitfalls]."
+     - Present: "The profile suggests skipping these challenge gates: [skip_challenge_gates]."
+     - Ask: "Want to use this profile and skip to spec, or run the full challenge?"
+     - Options: "Use profile, skip to spec" / "Use profile pitfalls but run full challenge" / "Ignore profile"
+   - If the user chooses to skip: jump to Phase 2 with the profile's pitfalls pre-loaded.
+2. If no matching profile exists, proceed with the full challenge.
 
 ### Round 1: The Five Gates
 
@@ -785,7 +808,14 @@ Save the review output to `.claude/loop/sessions/<name>/reviews/cycle-<N>.md`.
 **If VERDICT is FAIL:**
 - Check if cycle < max_cycles.
 - If yes: the Stop hook will catch the exit and re-inject the builder prompt with findings. The loop continues automatically.
-  - For OPNet projects: route reviewer findings to specific agents based on the finding category (contract/frontend/backend/integration).
+  - **Score-based routing (v3.6):** For each CRITICAL or MAJOR finding, use `route-finding.sh` to determine the best agent:
+    ```bash
+    bash ${CLAUDE_PLUGIN_ROOT}/scripts/route-finding.sh "<finding description>" "<candidate-agents>"
+    ```
+    The script returns `agent_name|confidence|reasoning`. If confidence >= 0.6, route to that agent. If confidence < 0.6 (keyword fallback), use the traditional category-based routing as a safety net.
+  - For OPNet projects: candidate agents are `opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev`.
+  - For generic projects: candidate agents are derived from the agents that were dispatched in this session.
+  - After routing, write a categorized findings file to `artifacts/findings-categorized.md` for use by `update-scores.sh --findings` during wrap-up. Format per finding: `agent: <name> | category: <category> | outcome: pending`
 - If no (max cycles reached): update state to `failed`. Print remaining findings and the PR URL. The human takes over.
 
 ---
@@ -888,11 +918,17 @@ After writing the retrospective, update the pattern store and agent scores:
 
 2. **Update agent scores** from the session state:
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-scores.sh .claude/loop/state.yaml <pass|fail>
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-scores.sh .claude/loop/state.yaml <pass|fail> --findings .claude/loop/sessions/<name>/artifacts/findings-categorized.md
    ```
-   This reads agent_status from state, computes rolling metrics (success rate, avg cycles, tokens), and updates `learning/agent-scores.yaml`.
+   This reads agent_status from state, computes rolling metrics (success rate, avg cycles, tokens), and updates `learning/agent-scores.yaml`. When `--findings` is provided, it also parses finding categories and updates agent strengths/weaknesses arrays.
 
-Both scripts are idempotent — safe to re-run if interrupted.
+3. **Generate/update project-type profiles:**
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/generate-profiles.sh
+   ```
+   This scans all retrospectives, counts sessions per project type, and generates profile YAML files in `learning/profiles/` when session count crosses thresholds (5, 10, 20, 50). Profiles include common pitfalls, recommended config, and per-agent performance data.
+
+All three scripts are idempotent — safe to re-run if interrupted.
 
 ### Final Checkpoint
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.6.0] - 2026-03-13
+
+### Added
+- **Score-based finding routing** (`scripts/route-finding.sh`): Routes reviewer and auditor findings to the agent most likely to fix them based on historical success rates. Uses a fixed category taxonomy (10 categories: css-styling, wallet-connect, contract-logic, abi-mismatch, network-config, deployment, testing, security, build-errors, backend-api) matched against agent strengths/weaknesses. Falls back to keyword routing when agents have fewer than 5 sessions.
+- **Strengths/weaknesses tracking** (`scripts/update-scores.sh --findings`): New `--findings` flag accepts a categorized findings file and updates per-agent strengths and weaknesses arrays in agent-scores.yaml. Categories are accumulated across sessions — successful fixes add to strengths, failures add to weaknesses.
+- **Project-type profiles** (`learning/profiles/*.yaml`): Auto-generated profiles for project types with 5+ completed sessions. Profiles include common pitfalls (from patterns.yaml), recommended agent config, suggested challenge gates to skip, and per-agent performance data.
+- **Profile generation script** (`scripts/generate-profiles.sh`): Scans retrospectives and patterns by project type, generates/regenerates profiles at session count thresholds (5, 10, 20, 50).
+- **Profile consultation in Phase 1**: Orchestrator checks for matching profiles during the challenge phase. If found, presents common pitfalls and offers to skip challenge gates based on accumulated experience.
+- **Profile loading in Phase 4**: Orchestrator pre-loads profile pitfalls into agent dispatch prompts so agents start with knowledge of known issues for this project type.
+
+### Changed
+- **Phase 5 FAIL routing** (`commands/buidl.md`): Reviewer findings now routed via `route-finding.sh` instead of hardcoded keyword matching. Score-based routing when agents have 5+ sessions; keyword fallback otherwise. Categorized findings written to `artifacts/findings-categorized.md` for post-session strengths/weaknesses tracking.
+- **Phase 4 Step 0b** (`commands/buidl.md`): Agent score consultation now notes strengths and weaknesses for use in routing decisions.
+- **Phase 6 wrap-up** (`commands/buidl.md`): Now calls `generate-profiles.sh` after `update-scores.sh`. Also passes `--findings` to update-scores.sh when categorized findings exist.
+- **Plugin version**: 3.5.0 -> 3.6.0
+
+### Why
+Two deferred features from v3.5 that close the adaptive learning loop. Score-based routing means the plugin doesn't just track which agents succeed — it uses that data to make smarter routing decisions. When frontend-dev has historically fixed 90% of CSS issues but only 40% of WebSocket issues, CSS findings go to frontend-dev and WebSocket findings go to backend-dev. Project-type profiles mean the 6th OP-20 token build starts with knowledge of what went wrong in the first 5, which challenge gates are redundant, and which agents perform best for that project type.
+
 ## [3.5.0] - 2026-03-13
 
 ### Added
