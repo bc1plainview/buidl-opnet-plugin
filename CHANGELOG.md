@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.4.0] - 2026-03-13
+
+### Added
+- **E2E testing hard gate in stop-hook**: Shell-level enforcement that blocks loop exit when a deployed OPNet contract has no E2E test results. The stop-hook checks for `deployment_address` in state and `e2e-results.json` in artifacts — if the contract is deployed but E2E tests haven't run, the loop is physically blocked (exit code 2) and the E2E tester prompt is re-injected. Failed E2E tests also block. This eliminates the need to manually tell agents to test deployments.
+- **Frontend runtime smoke check** (`opnet-frontend-dev.md` Step 6.5): After build passes, frontend-dev now starts a Vite dev server and runs a Playwright headless check for console errors, dark background verification, and visible content rendering. Catches runtime bugs that lint/typecheck/build miss.
+- **Frontend pre-flight checklist** (`opnet-frontend-dev.md` Step 6.7): 10 grep-based anti-pattern checks run against `src/` before build-result.json is written — Buffer usage, private key leaks (signer !== null), wrong network, forbidden approve(), spinners, emojis, hardcoded colors, missing meta tags, static feeRate, missing explorer links. FAIL items block completion.
+- **Common Runtime Errors knowledge** (`knowledge/slices/frontend-dev.md`): 10 documented runtime error patterns (RT-1 through RT-10) covering Node.js polyfill failures, undici/fetch shim, duplicate package instances, CORS errors, React hydration mismatch, BigInt serialization, WalletConnect modal positioning, Vite dev server crashes, CSS variable undefined, and wallet-connects-but-no-interaction.
+- **E2E handoff file** (`opnet-deployer.md` Step 8): Deployer now writes `artifacts/deployment/e2e-handoff.json` with structured contract address (bech32 + hex), ABI path, receipt path, wallet env paths, and RPC URL. The stop-hook reads this file to construct the E2E tester dispatch prompt.
+- **`e2e_testing` active phase**: Added to stop-hook, guard-state, and guard-state-bash active phase lists so the loop stays blocked during E2E testing.
+
+### Changed
+- **Stop-hook** (`hooks/scripts/stop-hook.sh`): Added E2E testing gate (~40 lines) between wall-clock timeout and reviewer verdict check. Handles three states: no E2E results (block + dispatch), E2E failed (block + route to contract-dev), E2E passed (allow exit).
+- **Guard-state hooks**: Both `guard-state.sh` and `guard-state-bash.sh` now include `e2e_testing` in their active phase case statements.
+- **Orchestrator** (`commands/buidl.md`): Step 2e now includes state update (`current_phase=e2e_testing status=e2e_testing`), 5-point precondition checklist, and 4-point postcondition checklist. Step 2f max UI test cycles increased from 2 to 3.
+- **Frontend-dev agent** (`agents/opnet-frontend-dev.md`): Renumbered old Step 6.5 (Proactivity Check) to Step 6.8. New Steps 6.5 (smoke check), 6.7 (pre-flight checklist) are mandatory before build-result.json is written.
+- **Deployer agent** (`agents/opnet-deployer.md`): Step 8 rewritten from vague "Prepare E2E Test Handoff" to concrete "Write E2E Handoff File" with exact JSON schema and 4 rules.
+- **Plugin version**: 3.3.0 → 3.4.0
+
+### Why
+Two persistent pain points: (1) E2E on-chain testing required manual intervention — agents would deploy contracts and declare success without testing them on-chain, despite orchestrator instructions saying "MANDATORY." Prompt-level instructions aren't enough; the stop-hook now physically blocks exit until E2E tests pass. (2) Frontend output consistently had runtime bugs (console errors, white backgrounds, broken rendering) that only surfaced during UI testing, wasting entire fix cycles. The runtime smoke check and pre-flight checklist catch these bugs inside the frontend-dev agent itself, before the UI tester ever runs.
+
 ## [3.3.0] - 2026-03-13
 
 ### Added

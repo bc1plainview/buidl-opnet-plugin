@@ -149,14 +149,31 @@ If a frontend exists, update the contract address configuration:
 - Update the contract address for the deployed network
 - This allows the frontend to interact with the deployed contract
 
-### 8. Prepare E2E Test Handoff (MANDATORY)
+### 8. Write E2E Handoff File (MANDATORY)
 
-After deployment, the on-chain E2E tester (`opnet-e2e-tester`) runs next. Ensure the receipt includes everything it needs:
+After successful deployment, you MUST write `artifacts/deployment/e2e-handoff.json`. The orchestrator and stop-hook use this file to automatically dispatch the E2E tester. **If you skip this step, the E2E tester will not run and the loop will be blocked.**
 
-- `contractAddress` in both bech32 and hex format
-- `network` identifier
-- Paths to test wallet `.env` files (if they exist in the deploy directory)
-- ABI path for the deployed contract
+```json
+{
+    "contractAddress": "opt1s...",
+    "contractAddressHex": "0x...",
+    "network": "opnetTestnet",
+    "abiPath": "artifacts/contract/abi.json",
+    "receiptPath": "artifacts/deployment/receipt.json",
+    "walletEnvPaths": {
+        "primary": "deploy/.env",
+        "secondary": "deploy/.env.buyer"
+    },
+    "rpcUrl": "https://testnet.opnet.org",
+    "deployedAt": "2026-03-13T00:00:00Z"
+}
+```
+
+**Rules for the handoff file:**
+1. `contractAddress` must be the bech32 address (opt1s... or bc1p...)
+2. `contractAddressHex` must be the 0x-prefixed hex (from receipt or resolution)
+3. `walletEnvPaths` should list ALL .env files found in the deploy directory
+4. If no wallet .env files exist, set `walletEnvPaths` to `{}` — the E2E tester will surface funding instructions to the user
 
 The E2E tester will send REAL transactions against this contract. Deployment is not the final step — on-chain verification is.
 

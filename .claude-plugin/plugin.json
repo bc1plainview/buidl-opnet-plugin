@@ -1,7 +1,7 @@
 {
   "name": "buidl",
-  "version": "3.3.0",
-  "description": "Full dev lifecycle for OP_NET Bitcoin L1 projects: idea → challenge → spec → build → review → ship. Includes the OP_NET Bible (2000+ lines of rules, patterns, and known mistakes) that prevents AI agents from hallucinating package versions, using forbidden patterns, or shipping exploitable code. Now with mandatory on-chain E2E testing, PUA exhaustive problem-solving methodology, and GSD-2 debugging discipline — agents never give up prematurely.",
+  "version": "3.4.0",
+  "description": "Full dev lifecycle for OP_NET Bitcoin L1 projects: idea → challenge → spec → build → review → ship. Includes the OP_NET Bible (2000+ lines of rules, patterns, and known mistakes) that prevents AI agents from hallucinating package versions, using forbidden patterns, or shipping exploitable code. Now with shell-enforced E2E testing gates, frontend runtime smoke checks, pre-flight anti-pattern scanning, PUA exhaustive problem-solving methodology, and GSD-2 debugging discipline — agents never skip testing or ship buggy frontends.",
   "author": {
     "name": "dannyplainview + bob"
   }

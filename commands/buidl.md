@@ -598,14 +598,25 @@ After successful deployment, update frontend config with the deployed contract a
 
 #### Step 2e: On-Chain E2E Testing (MANDATORY — after deployment)
 
-**This step is NON-NEGOTIABLE. Nothing is declared "ready" until real on-chain tests pass.**
+**This step is NON-NEGOTIABLE. The stop-hook ENFORCES this gate — if deployment_address is set and e2e-results.json does not exist, the loop CANNOT proceed to review.**
+
+Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=e2e_testing status=e2e_testing`
+
+**Precondition checklist (ALL must pass before dispatching):**
+- [ ] `artifacts/deployment/receipt.json` exists and has `"status": "success"`
+- [ ] `deployment_address` is set in state (non-empty)
+- [ ] `artifacts/contract/abi.json` exists and is valid JSON
+- [ ] `artifacts/deployment/e2e-handoff.json` exists (written by deployer)
+- [ ] At least one wallet .env file exists in the deploy directory, OR the handoff has `walletEnvPaths: {}`
+
+If the handoff file is missing, read `receipt.json` directly and construct the E2E tester prompt manually. **Do NOT skip E2E testing because the handoff file is missing.**
 
 Launch `opnet-e2e-tester` agent:
 - Knowledge: `knowledge/slices/e2e-testing.md`
-- Import: Deployed contract address from `artifacts/deployment/receipt.json`
+- Import: Deployed contract address from `artifacts/deployment/e2e-handoff.json` (or `receipt.json`)
 - Import: Contract ABI from `artifacts/contract/abi.json`
 - Import: Spec documents (requirements.md, tasks.md) for expected behavior
-- Import: Test wallet credentials (paths to .env files)
+- Import: Test wallet credentials from `walletEnvPaths` in handoff
 - Output: `artifacts/testing/e2e-results.json`, `artifacts/testing/e2e-plan.md`
 
 The E2E tester:
@@ -617,6 +628,12 @@ The E2E tester:
 6. Verifies final on-chain state matches expected values from the spec
 
 **Why simulation is not enough:** The OPNet node provides `output.to` as bech32 in real transactions but ML-DSA hex in simulation. `output.scriptPublicKey` is null in real transactions. Contracts that only validate against simulation format will pass simulation but revert on-chain. This agent catches those bugs.
+
+**Postcondition checklist (ALL must pass after agent completes):**
+- [ ] `artifacts/testing/e2e-results.json` exists
+- [ ] `e2e-results.json` has a `"status"` field (either `"pass"` or `"fail"`)
+- [ ] If status is `"pass"`: all `tests.*.failed` counts are 0
+- [ ] If status is `"fail"`: failure details include tx hashes and error descriptions
 
 **Decision after E2E tests:**
 - If all on-chain tests pass: proceed to UI testing (Step 2f)
@@ -641,7 +658,7 @@ Launch `opnet-ui-tester` agent:
 - If tests fail:
   - Route UI failures to `opnet-frontend-dev` for fixes
   - After fixes: re-run UI tester
-  - Max test cycles: 2
+  - Max test cycles: 3 (increased from 2 — frontend bugs often take multiple fix cycles)
 
 ### Step 3: Commit, Push, and Create PR
 
