@@ -635,23 +635,47 @@ Critique dispatch:
 **If an agent fails:**
 1. Retry once, including the error output in the retry prompt.
 2. Log a trace event: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> error <agent-name> build <cycle> "Agent failed after retry"`
-3. If retry also fails, check for a known fix pattern:
+3. If retry also fails, run the **Structured Repair Phases** (Agentless Pattern):
+
+   **Phase R1 -- LOCALIZE** (max_turns: 5, READ-ONLY):
+   Run failure localization on the agent's error output:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/localize-failure.sh <failure-log-path>
+   ```
+   This produces `artifacts/localization.json` with: file, function, line_range, suspected_cause, confidence, failure_category. The reviewer is dispatched in **localize mode** (see loop-reviewer.md Localize Mode). Output is localization.json only -- NO code generation.
+
+   **Phase R2 -- PATCH** (max_turns: 10):
+   Dispatch the domain agent (the one that failed) with ONLY the localized context:
+   - The localization.json file
+   - The specific file and line range identified
+   - Instruction: "Generate up to 3 candidate patches for the issue at {file}:{line_range}. Each patch should be a minimal fix addressing: {suspected_cause}."
+   The agent produces up to 3 candidate patches in `artifacts/repair/patch-1.diff`, `patch-2.diff`, `patch-3.diff`.
+
+   **Phase R3 -- VALIDATE** (automated):
+   For each candidate patch:
+   1. Apply the patch to a temp copy
+   2. Run the full test suite
+   3. If contract: run mutation testing
+   4. Score the result: tests passing + mutation score
+   Pick the best-scoring patch and apply it. If no patch passes tests, fall through to the manual options below.
+
+4. If R1/R2/R3 produced a working fix, continue the loop. Otherwise, check for a known fix pattern:
    ```bash
    PATTERN_MATCH=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/query-pattern.sh "<failure-category>" "<keywords>" 2>/dev/null || true)
    ```
-4. If a pattern match is found (`PATTERN_MATCH` is non-empty), present AskUserQuestion with 5 numbered options:
+5. If a pattern match is found (`PATTERN_MATCH` is non-empty), present AskUserQuestion with 5 numbered options:
    - "Apply known fix: [description from pattern match]"
    - "Retry with a different approach"
    - "Skip this agent and continue"
    - "Amend the spec to work around this"
    - "Cancel the loop"
    If the user selects "Apply known fix", apply the fix from the pattern, log a replan trace event, and retry the agent.
-5. If no pattern match is found, present AskUserQuestion with 4 numbered options:
+6. If no pattern match is found, present AskUserQuestion with 4 numbered options:
    - "Retry with a different approach"
    - "Skip this agent and continue"
    - "Amend the spec to work around this"
    - "Cancel the loop"
-6. Never ask open-ended questions like "what should I do?"
+7. Never ask open-ended questions like "what should I do?"
 
 #### Step 2a: Contract Development (if components.contract = true)
 
@@ -672,6 +696,13 @@ After contract-dev completes successfully:
 3. Log: "ABI locked with hash: $ABI_HASH"
 
 This hash is verified before frontend/backend dispatch to detect unauthorized ABI modifications.
+
+**Generate Repo Map (after ABI lock):**
+After contract-dev completes and ABI is locked, generate the hierarchical repo map:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/build-repo-map.sh artifacts/contract/abi.json "" ""
+```
+This creates `artifacts/repo-map.md` with the Contract Layer populated from the ABI. Frontend and Backend layers will be populated after those agents complete. All domain agents reference this map for cross-layer awareness.
 
 #### Issue Check: Post-Contract (CONDITIONAL)
 
@@ -764,6 +795,13 @@ Launch `cross-layer-validator` agent:
 - PASS findings confirm correct integration
 
 This step catches ABI mismatches, wrong method names, parameter type errors, contract address inconsistencies, and network config conflicts BEFORE the auditor runs — saving entire audit cycles.
+
+**Regenerate Repo Map (after builders complete):**
+After all builders and cross-layer validation are done, regenerate the repo map with all layers populated:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/build-repo-map.sh artifacts/contract/abi.json "[WORKTREE]/frontend" "[WORKTREE]/backend"
+```
+The updated `artifacts/repo-map.md` now has Contract, Frontend, and Backend layers plus cross-layer integrity checks. The auditor and reviewer reference this map for integration context.
 
 #### Step 2c: Security Audit
 
@@ -983,6 +1021,21 @@ If the spec has fewer than 5 tasks and touches a single domain, fall back to the
 
 Update state: `current_phase: review`, `status: reviewing`
 
+### Mutation Gate (before reviewer dispatch)
+
+If a contract was built in this session (`components.contract = true`), run mutation testing before the reviewer:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/mutate-contract.sh <contract-src-path> <test-dir>
+```
+
+Read `artifacts/testing/mutation-score.json` and check the verdict:
+- If `mutation_score < 0.70` (verdict: FAIL): DO NOT dispatch the reviewer. Instead, route back to `opnet-contract-dev` with the survivors list. Include: "Mutation testing failed: {killed}/{total} mutants killed (score: {mutation_score}). These mutations survived — your tests do not cover them: {survivors}. Add tests to kill these mutants before proceeding."
+- If `mutation_score >= 0.70` (verdict: PASS): proceed to reviewer dispatch.
+- If mutation-score.json does not exist or has errors: log a warning and proceed (do not block on mutation infrastructure issues).
+
+### Reviewer Dispatch
+
 Launch the `loop-reviewer` agent. Give it:
 
 1. The three spec documents.
@@ -1025,6 +1078,7 @@ Save the review output to `.claude/loop/sessions/<name>/reviews/cycle-<N>.md`.
   - For OPNet projects: candidate agents are `opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev`.
   - For generic projects: candidate agents are derived from the agents that were dispatched in this session.
   - After routing, write a categorized findings file to `artifacts/findings-categorized.md` for use by `update-scores.sh --findings` during wrap-up. Format per finding: `agent: <name> | category: <category> | outcome: pending`
+  - **Structured Repair (v7.0):** When routing findings to agents, use the R1/R2/R3 repair phases instead of raw re-dispatch. Run `localize-failure.sh` on the failure context first (Phase R1), then dispatch the agent with localized context only (Phase R2), then validate candidate patches (Phase R3). This replaces "re-run agent with failure context" for more targeted repairs.
 - If no (max cycles reached): update state to `failed`. Generate failure diagnosis and print remaining findings with the PR URL. The human takes over.
 
 ### Findings Ledger
@@ -1048,6 +1102,30 @@ After Phase 5 review completes (every cycle), parse the reviewer's findings and 
 4. Status values: `OPEN` (new finding), `RESOLVED` (fixed in a later cycle), `REGRESSION` (was resolved but reappeared).
 5. **3-cycle archiving rule**: For findings where `(current_cycle - cycle_found) > 3`, move them to an "Archived Findings" section at the bottom of the ledger. Archived findings are not checked for regression — they are historical records only.
 6. For cycle 2+ reviewer dispatch: include the ledger in the prompt with instruction: "Check all RESOLVED findings for regression. Mark regressions as CRITICAL with [REGRESSION] tag."
+
+### Goal-Oriented Build Scoring
+
+After each review cycle (pass or fail), run the build scoring script:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/score-build.sh
+```
+
+This evaluates 4 dimensions and writes `artifacts/evaluation/progress-tracker.yaml`:
+
+| Dimension | Threshold | Route on Fail |
+|-----------|-----------|---------------|
+| spec_coverage | >= 90% | loop-reviewer (spec gaps) |
+| security_delta | <= 0 | opnet-auditor (open findings) |
+| mutation_score | >= 70% | opnet-contract-dev (untested paths) |
+| code_health | >= 60% | responsible builder (quality issues) |
+
+Display the compact score table in the review summary. ALL thresholds must be met for the build to be considered complete. Failed dimensions route to the responsible agent with specific remediation context.
+
+If `spec-requirements.yaml` does not exist yet, run `extract-requirements.sh` first:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/extract-requirements.sh <requirements-md-path>
+```
 
 ### Structured Failure Diagnosis
 

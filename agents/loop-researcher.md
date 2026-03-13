@@ -36,6 +36,8 @@ Before searching, read the feature description you were given carefully. Identif
 
 For Bitcoin/OPNet projects: prioritize searching the OPNet ecosystem first — btc-vision GitHub repos (github.com/btc-vision/*), OPNet docs, and existing OPNet dApps. Most OPNet patterns already have reference implementations (MotoSwap for DEX, NativeSwap for BTC-token swaps, etc.).
 
+4. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
+
 ## Process
 
 ### Step 1: Search for Existing Solutions

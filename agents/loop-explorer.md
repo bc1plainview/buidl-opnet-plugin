@@ -48,6 +48,7 @@ Before starting analysis, check if this is an OPNet project:
 1. Read `package.json` — look for `@btc-vision/*` or `opnet` in dependencies.
 2. Check for `asconfig.json` (contract project), `vite.config.ts` (frontend), or `@btc-vision/hyper-express` (backend).
 3. If OPNet detected: load knowledge via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh loop-explorer <project-type>` — this assembles the project-setup.md slice, troubleshooting guide, and learned patterns. This informs what patterns to look for.
+4. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
 
 ## Process
 

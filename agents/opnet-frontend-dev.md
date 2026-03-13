@@ -55,6 +55,7 @@ Before writing ANY code:
 2. Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transaction-simulation.md) -- the "Frontend Simulation Pattern" section.
 3. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) COMPLETELY. This is your problem-solving methodology.
 4. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
+5. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
 
 **The PUA methodology applies throughout your session:** exhaust all options before escalating, act before asking, take initiative, verify after every fix.
 

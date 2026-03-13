@@ -54,6 +54,7 @@ Before writing ANY code:
 1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-contract-dev <project-type>` — this assembles your domain slice (`knowledge/slices/contract-dev.md`), troubleshooting guide, the full bible (all sections), and learned patterns.
 2. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) COMPLETELY. This is your problem-solving methodology.
 3. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
+4. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
 
 **The PUA methodology applies throughout your session:** exhaust all options before escalating, act before asking, take initiative, verify after every fix.
 

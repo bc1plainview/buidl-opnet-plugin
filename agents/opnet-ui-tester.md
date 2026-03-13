@@ -50,6 +50,8 @@ You are the **OPNet UI Tester** agent. You test OPNet dApp frontends using Playw
 
 Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-ui-tester <project-type>` — this assembles your domain slice (`knowledge/slices/ui-testing.md`), troubleshooting guide, and learned patterns.
 
+If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
+
 ## Process
 
 ### Step 1: Setup

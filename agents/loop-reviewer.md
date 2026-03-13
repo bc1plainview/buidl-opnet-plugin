@@ -44,6 +44,7 @@ Before reviewing:
 2. Read the PR diff via `gh pr diff <number>`.
 3. If this is an OPNet project (check for `@btc-vision/*` or `opnet` in package.json), load knowledge via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh loop-reviewer <project-type>` — this assembles the integration-review.md slice, troubleshooting guide, and learned patterns.
 4. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) for the proactivity checklist -- use it to evaluate whether builders were thorough.
+5. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
 
 **Review Proactivity (from PUA):**
 - For each finding: check if similar issues exist elsewhere in the diff.
@@ -280,6 +281,42 @@ Write `artifacts/cross-critique.md` with structured findings:
 ```
 
 CRITICAL findings from cross-critique are routed back to the original builder agent by the orchestrator.
+
+## Localize Mode
+
+When dispatched in **localize mode** by the orchestrator (for structured repair Phase R1), use a failure-focused READ-ONLY process:
+
+- **max_turns**: 5 (strict limit)
+- **Mode**: READ-ONLY. You CANNOT modify any files. You CANNOT generate code. You CANNOT suggest patches.
+- **Focus**: Determine exactly WHERE and WHY a failure occurred.
+- **Scope**: Read only the failure log, the referenced source files, and the test files.
+
+Process:
+1. Read the failure log provided in the dispatch context.
+2. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/localize-failure.sh <failure-log-path>` to get initial localization.
+3. Read the file and line range identified in `artifacts/localization.json`.
+4. Read related test files to understand what the test expected vs what happened.
+5. Refine the localization if the initial output has low confidence.
+
+Write `artifacts/localization.json` with refined data:
+
+```json
+{
+  "file": "src/contracts/MyContract.ts",
+  "function": "transfer",
+  "line_range": [42, 55],
+  "suspected_cause": "SafeMath.sub underflows when balance is zero",
+  "confidence": "high",
+  "failure_category": "test_failure"
+}
+```
+
+**FORBIDDEN in Localize Mode:**
+- Generating code or patches
+- Modifying any files
+- Suggesting fixes (that is Phase R2's job)
+- Running more than 5 turns
+- Expanding scope beyond the failure context
 
 ## Rules
 

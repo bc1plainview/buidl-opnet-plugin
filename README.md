@@ -69,6 +69,7 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `/buidl-clean` | Cancel + remove worktree and branch |
 | `/buidl-trace` | Show agent execution trace timeline for the current session |
 | `/buidl-learning` | Show learning system health report (patterns, scores, profiles) |
+| `/buidl-optimize <metric>` | Optimize gas, bundle_size, test_time, or throughput via automated experimentation |
 
 ### Flags
 
@@ -142,6 +143,21 @@ Agents no longer load the full 2000-line bible regardless of role. `scripts/load
 
 #### Property-Based Fuzz Testing
 `scripts/fuzz-contract.sh` reads a contract ABI, extracts method signatures and parameter types, and generates boundary test cases: u256 values [0, 1, 2^128, 2^256-1, 2^256-2], address values [zero, contract, caller], bool values [true, false]. Produces all single-param boundary combinations plus 10 random combinations per method. Output goes to `artifacts/testing/fuzz-cases.json` and feeds into both the adversarial auditor and adversarial E2E tester. Does not send transactions.
+
+#### Mutation Testing Gate
+`scripts/mutate-contract.sh` applies 20 mutation operators to contract source and checks whether tests catch each mutation. Mutations include arithmetic swaps (add/sub, mul/div), comparison inversions, boolean flips, revert removal, constant swaps, and event removal. The mutation score (killed/total) must be >= 70% to proceed to review. Surviving mutants are routed back to contract-dev with specific details of what the tests missed.
+
+#### Structured Repair Phases (R1/R2/R3)
+When agents fail, repair follows three targeted phases instead of blindly re-running with full context. R1 (LOCALIZE): the reviewer in localize mode identifies the exact file, function, and line range. R2 (PATCH): the domain agent receives only the localized context and generates up to 3 candidate patches. R3 (VALIDATE): patches are tested and scored automatically, and the best one is applied.
+
+#### Goal-Oriented Build Evaluation
+`scripts/score-build.sh` evaluates builds across 4 dimensions: spec coverage (requirements with tests), security delta (open findings), mutation score, and code health. Each dimension has a threshold and routes to the responsible agent on failure. The compact score table is displayed after every review cycle.
+
+#### Hierarchical Repo Map
+`scripts/build-repo-map.sh` generates a cross-layer map from the ABI, frontend source, and backend source. Shows contract methods with signatures, frontend components and their contract calls, backend routes and their contract calls, and auto-detects missing methods (called but not in ABI) and uncalled methods (in ABI but never referenced).
+
+#### Autoresearch Optimize Mode
+`/buidl-optimize gas` runs an automated optimization loop: hypothesize, implement, benchmark, keep/revert. Supports gas, bundle_size, test_time, and throughput metrics. Default 10 cycles. No test regressions allowed. Produces a summary and auto-creates a PR with kept changes.
 
 #### Dynamic Re-Planning
 When an agent fails after retry, the orchestrator queries `learning/patterns.yaml` for known fix patterns matching the failure category. If a match is found, it presents a 5th option ("Apply known fix: [description]") alongside the standard 4 error-handling options. Lessons from past sessions are applied automatically instead of requiring manual intervention.
@@ -301,6 +317,7 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
         |  checkpoint after each agent + cost log
         v
    Phase 5: REVIEW
+   Mutation gate (>= 70% required) + 4-dim score card
    Reviewer checks PR against spec + 27 patterns
         |  checkpoint
         v
@@ -317,9 +334,9 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v6.0.0)
+|   +-- plugin.json              # Plugin manifest (v7.0.0)
 +-- agents/                      # 14 agent definitions (incl. adversarial auditor + tester)
-+-- commands/                    # 10 slash commands (incl. buidl-trace, buidl-learning)
++-- commands/                    # 11 slash commands (incl. buidl-optimize)
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
@@ -328,14 +345,14 @@ buidl/
 |   +-- patterns.yaml            # Structured pattern store (auto-updated)
 |   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
 |   +-- profiles/                # Auto-generated project-type profiles
-+-- scripts/                     # Setup + state writer + learning + routing + tracing + fuzz + knowledge scripts
++-- scripts/                     # Setup + state + learning + routing + tracing + fuzz + mutation + scoring + repo-map scripts
 +-- skills/                      # 3 triggerable skills
 |   +-- audit-from-bugs/
 |   +-- loop-guide/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 419 structural + functional + integration tests
++-- tests/                       # 450+ structural + functional + integration tests
 ```
 
 ## Testing
@@ -344,13 +361,16 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-434+ tests across 53 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
+450+ tests across 57 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, regression tracking, mutation testing, structured repair phases, goal-oriented evaluation, repo map, and autoresearch optimize.
 
 Tests run automatically on every push and PR via GitHub Actions.
 
 ---
 
 ## Version History
+
+### v7.0.0 — Mutation + Repair + Scoring (2026-03-13)
+Four verification and repair improvements: **Mutation testing gate** applies 20 operators to contract source, requiring >= 70% kill rate before review. **Structured repair phases** (R1/R2/R3) localize failures, generate targeted patches, and validate automatically. **Goal-oriented build evaluation** scores builds across 4 dimensions (spec coverage, security, mutation, code health) with routing for each failed dimension. **Hierarchical repo map** provides cross-layer visibility from ABI to frontend/backend calls. Plus **autoresearch optimize mode** for automated metric improvement.
 
 ### v6.0.0 — Dynamic Knowledge (2026-03-13)
 Three knowledge and learning system improvements: **Dynamic knowledge slice loading** assembles role-specific knowledge payloads per agent, filtering the 2000-line bible to only role-relevant sections and keeping payloads under 400 lines. **Property-based fuzz case generation** creates structured boundary test cases from ABI signatures for adversarial auditing. **Stale pattern pruning** with version-based staleness tracking and a `/buidl-learning` health report.
