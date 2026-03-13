@@ -116,14 +116,28 @@ The plugin learns from every session and gets smarter over time.
 ### Agent Performance Scoring (`learning/agent-scores.yaml`)
 - Rolling averages for success rate, cycles to pass, and tokens consumed per agent
 - Per-model breakdowns (opus vs sonnet performance tracking)
+- Per-agent strengths and weaknesses tracked by finding category
 - Scores require 5+ data points before surfacing in `/buidl-status`
-- Orchestrator consults scores to inform agent dispatch order
+- Orchestrator consults scores to inform agent dispatch order and finding routing
 
 ### Cross-Layer Validator
 - Validates ABI-to-frontend method mapping, parameter types, contract addresses, network config
 - Runs after all builders but before the auditor — catches integration mismatches early
 - 8 mismatch types with detection rules and routing decisions
 - READ-ONLY agent (cannot modify files)
+
+### Score-Based Finding Routing (v3.6)
+- Reviewer/auditor findings routed to agents based on historical success rates
+- 10 finding categories with keyword matching taxonomy
+- Falls back to keyword routing when agents have <5 sessions
+- `scripts/route-finding.sh` is testable standalone: `bash scripts/route-finding.sh "CSS broken" "frontend-dev,backend-dev"`
+
+### Project-Type Profiles (v3.6)
+- Auto-generated profiles after 5+ projects of the same type
+- Common pitfalls pre-loaded from pattern store into agent prompts
+- Recommended config (model, max_cycles) based on historical performance
+- Challenge gates can be skipped for well-understood project types
+- Profiles regenerated at session thresholds (5, 10, 20, 50)
 
 ### Starter Templates (`templates/starters/`)
 - Pre-built project scaffolds for common OPNet patterns (OP-20 token included)
@@ -283,6 +297,8 @@ If the loop is interrupted (context exhaustion, wall-clock timeout, manual cance
 | Adaptive learning | v3.5 | Pattern extraction, agent scoring, auto-promotion to knowledge slices. |
 | Cross-layer validation | v3.5 | ABI-to-frontend/backend integration checking between build and audit. |
 | Starter templates | v3.5 | Pre-built scaffolds for OP-20 tokens (more planned). |
+| Score-based routing | v3.6 | Finding routing based on agent strengths/weaknesses + historical success rates. |
+| Project-type profiles | v3.6 | Auto-generated project configs after 5+ sessions of the same type. |
 | Dynamic agents | v3.0 | Non-OPNet projects generate domain agents from templates. |
 | On-chain E2E testing | v3.2 | Real transactions with test wallets. Every method tested. Multi-wallet flows. |
 | PUA methodology | v3.3 | Exhaustive problem-solving with anti-rationalization and pressure escalation. |
@@ -296,17 +312,18 @@ If the loop is interrupted (context exhaustion, wall-clock timeout, manual cance
 ```
 buidl/
 +-- .claude-plugin/
-|   +-- plugin.json              # Plugin manifest (v3.5.0)
+|   +-- plugin.json              # Plugin manifest (v3.6.0)
 +-- agents/                      # 12 agent definitions (incl. cross-layer-validator)
 +-- commands/                    # 7 slash commands
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
 |   +-- slices/                  # 10 knowledge slices
-+-- learning/                    # Patterns, agent scores, retrospectives
++-- learning/                    # Patterns, agent scores, profiles, retrospectives
 |   +-- patterns.yaml            # Structured pattern store (auto-updated)
 |   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
-+-- scripts/                     # Setup + atomic state writer + learning scripts
+|   +-- profiles/                # Auto-generated project-type profiles
++-- scripts/                     # Setup + state writer + learning + routing scripts
 +-- skills/                      # 3 triggerable skills
 |   +-- audit-from-bugs/
 |   +-- loop-guide/

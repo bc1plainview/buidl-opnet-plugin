@@ -1,14 +1,19 @@
 #!/bin/bash
 # update-scores.sh — Update agent performance scores after a session completes
 #
-# Usage: bash scripts/update-scores.sh <state-file> <session-outcome>
+# Usage: bash scripts/update-scores.sh <state-file> <session-outcome> [--findings <findings-file>]
 #   state-file: path to the session's state.yaml
 #   session-outcome: "pass" or "fail"
+#   --findings: optional path to categorized findings file for strengths/weaknesses tracking
 #
 # Reads agent_status from the state file, updates rolling metrics in
 # learning/agent-scores.yaml for each agent that was dispatched.
 # The session-outcome parameter determines whether overall session success
 # is factored into per-agent scoring when individual agent status is ambiguous.
+#
+# When --findings is provided, parses the file for per-agent finding categories
+# and updates the strengths/weaknesses arrays in agent-scores.yaml.
+# Finding categories use the fixed taxonomy from route-finding.sh.
 #
 # Exit codes:
 #   0 — Success
@@ -20,9 +25,24 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCORES_FILE="$SCRIPT_DIR/learning/agent-scores.yaml"
 STATE_FILE="${1:-}"
 OUTCOME="${2:-}"
+FINDINGS_FILE=""
+
+# Parse optional --findings flag
+shift 2 2>/dev/null || true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --findings)
+      FINDINGS_FILE="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "$STATE_FILE" || ! -f "$STATE_FILE" ]]; then
-  echo "Usage: bash scripts/update-scores.sh <state-file> <pass|fail>" >&2
+  echo "Usage: bash scripts/update-scores.sh <state-file> <pass|fail> [--findings <file>]" >&2
   exit 1
 fi
 
@@ -161,5 +181,92 @@ with open(scores_file, 'w') as f:
 
   UPDATED=$((UPDATED + 1))
 done <<< "$DISPATCHED_AGENTS"
+
+# ─── Findings-Based Strengths/Weaknesses Update ───
+# If a findings file was provided, parse it and update agent strengths/weaknesses
+if [[ -n "$FINDINGS_FILE" && -f "$FINDINGS_FILE" ]]; then
+  python3 -c "
+import yaml, sys, re
+
+scores_file = sys.argv[1]
+findings_file = sys.argv[2]
+
+# Read findings file
+with open(findings_file) as f:
+    content = f.read()
+
+# Read current scores
+with open(scores_file) as f:
+    data = yaml.safe_load(f)
+
+agents = data.get('agents', {})
+
+# Parse findings: look for lines like 'agent: opnet-frontend-dev | category: css-styling | outcome: fixed'
+# or structured sections per agent
+agent_findings = {}
+
+# Format 1: structured lines
+for line in content.split('\n'):
+    # Match: agent:<name> category:<cat> outcome:<fixed|failed>
+    m = re.match(r'agent:\s*(\S+)\s*\|\s*category:\s*(\S+)\s*\|\s*outcome:\s*(\S+)', line.strip())
+    if m:
+        agent_name = m.group(1)
+        category = m.group(2)
+        outcome = m.group(3)
+        if agent_name not in agent_findings:
+            agent_findings[agent_name] = {'fixed': [], 'failed': []}
+        if outcome in ('fixed', 'pass', 'resolved'):
+            agent_findings[agent_name]['fixed'].append(category)
+        else:
+            agent_findings[agent_name]['failed'].append(category)
+
+# Format 2: markdown sections (## agent-name / - [x] category (fixed) / - [ ] category (failed))
+current_agent = None
+for line in content.split('\n'):
+    header_match = re.match(r'^##\s+(\S+)', line.strip())
+    if header_match:
+        current_agent = header_match.group(1)
+        if current_agent not in agent_findings:
+            agent_findings[current_agent] = {'fixed': [], 'failed': []}
+        continue
+    if current_agent:
+        fixed_match = re.match(r'^-\s*\[x\]\s*(\S+)', line.strip())
+        failed_match = re.match(r'^-\s*\[\s\]\s*(\S+)', line.strip())
+        if fixed_match:
+            agent_findings[current_agent]['fixed'].append(fixed_match.group(1))
+        elif failed_match:
+            agent_findings[current_agent]['failed'].append(failed_match.group(1))
+
+# Update strengths/weaknesses
+for agent_name, findings in agent_findings.items():
+    if agent_name not in agents:
+        continue
+    a = agents[agent_name]
+    strengths = set(a.get('strengths', []))
+    weaknesses = set(a.get('weaknesses', []))
+
+    for cat in findings['fixed']:
+        strengths.add(cat)
+        weaknesses.discard(cat)  # if fixed, remove from weaknesses
+
+    for cat in findings['failed']:
+        weaknesses.add(cat)
+        # Only remove from strengths if failed more than fixed in this category
+        if cat not in findings['fixed']:
+            strengths.discard(cat)
+
+    a['strengths'] = sorted(list(strengths))
+    a['weaknesses'] = sorted(list(weaknesses))
+    agents[agent_name] = a
+
+data['agents'] = agents
+with open(scores_file, 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+updated = len(agent_findings)
+if updated:
+    print(f'Strengths/weaknesses updated for {updated} agents from findings file')
+" "$SCORES_FILE" "$FINDINGS_FILE" 2>/dev/null
+fi
 
 echo "Agent scores updated: $UPDATED agents from session (outcome=$OUTCOME, cycle=$CYCLE)"
