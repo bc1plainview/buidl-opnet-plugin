@@ -105,77 +105,62 @@ alias claudeyproj="claude --dangerously-skip-permissions --plugin-dir /path/to/b
 | `loop-reviewer` | PR review against spec + pattern checklist |
 | `cross-layer-validator` | READ-ONLY ABI-to-frontend/backend integration validation |
 
-## Adaptive Learning System (v3.5)
+---
 
-The plugin learns from every session and gets smarter over time.
+## Features
 
-### Pattern Store (`learning/patterns.yaml`)
-- Anti-patterns and failures from retrospectives are extracted into a structured YAML store
-- Deduplicated by description similarity; occurrence counts tracked across sessions
-- Patterns with 3+ occurrences auto-promote to relevant knowledge slices with `[LEARNED]` tags
-- Grep-queryable by category, tech stack, failure type
+### Agent Intelligence
 
-### Agent Performance Scoring (`learning/agent-scores.yaml`)
-- Rolling averages for success rate, cycles to pass, and tokens consumed per agent
-- Per-model breakdowns (opus vs sonnet performance tracking)
-- Per-agent strengths and weaknesses tracked by finding category
-- Scores require 5+ data points before surfacing in `/buidl-status`
-- Orchestrator consults scores to inform agent dispatch order and finding routing
+Agents don't just execute instructions — they self-correct, learn from past sessions, and adapt their behavior based on accumulated experience.
 
-### Cross-Layer Validator
-- Validates ABI-to-frontend method mapping, parameter types, contract addresses, network config
-- Runs after all builders but before the auditor — catches integration mismatches early
-- 8 mismatch types with detection rules and routing decisions
-- READ-ONLY agent (cannot modify files)
+#### Self-Critique (Reflexion)
+All 4 builder agents (contract-dev, frontend-dev, backend-dev, loop-builder) re-read their changes against `requirements.md` before declaring done. Each writes a `self-critique.md` artifact with a spec compliance checklist, issues found and fixed, and remaining concerns. Any unmet acceptance criterion blocks completion until fixed. This catches spec drift before the reviewer does, saving entire review cycles.
 
-### Score-Based Finding Routing (v3.6)
-- Reviewer/auditor findings routed to agents based on historical success rates
-- 10 finding categories with keyword matching taxonomy
-- Falls back to keyword routing when agents have <5 sessions
-- `scripts/route-finding.sh` is testable standalone: `bash scripts/route-finding.sh "CSS broken" "frontend-dev,backend-dev"`
+#### Incremental Audit
+On cycle 2+, the auditor receives a `git diff` of changes since the last audit plus previous findings, instead of re-scanning the entire codebase. It focuses on the diff, checks blast radius of changes, and verifies previous findings are resolved. Cuts audit time significantly on fix cycles.
 
-### Project-Type Profiles (v3.6)
-- Auto-generated profiles after 5+ projects of the same type
-- Common pitfalls pre-loaded from pattern store into agent prompts
-- Recommended config (model, max_cycles) based on historical performance
-- Challenge gates can be skipped for well-understood project types
-- Profiles regenerated at session thresholds (5, 10, 20, 50)
+#### Dynamic Re-Planning
+When an agent fails after retry, the orchestrator queries `learning/patterns.yaml` for known fix patterns matching the failure category. If a match is found, it presents a 5th option ("Apply known fix: [description]") alongside the standard 4 error-handling options. Lessons from past sessions are applied automatically instead of requiring manual intervention.
 
-### Starter Templates (`templates/starters/`)
-- Pre-built project scaffolds for common OPNet patterns (OP-20 token included)
-- Template manifests with customization points (token name, symbol, decimals, features)
-- Includes contract, tests, frontend, hooks, and build config
-- Orchestrator detects matching templates and offers them during spec phase
+#### Execution Tracing
+Every agent dispatch, completion, routing decision, and error is logged as a structured JSONL event to `artifacts/trace.jsonl`. The `/buidl-trace` command renders these events as a formatted timeline grouped by cycle — full observability into what happened, when, and why.
 
-## Enforcement Mechanisms
+#### Dry-Run Mode
+The `--dry-run` flag runs Challenge, Specify, and Explore phases normally, then prints the full execution plan (agents, knowledge slices, tasks, max_turns) without dispatching any agents. Preview what will happen before committing to a full build.
 
-The plugin doesn't just tell agents what to do — it enforces compliance at the shell level:
+### Adaptive Learning
 
-### E2E Testing Hard Gate (v3.4)
+The plugin learns from every session and gets smarter over time. Three systems work together to turn past experience into better future performance.
 
-The stop-hook physically blocks loop exit (exit code 2) when:
-- An OPNet contract has been deployed (deployment_address exists in state)
-- But no `e2e-results.json` exists in artifacts (tests haven't run)
-- OR the E2E results have a non-pass status
+#### Pattern Store (`learning/patterns.yaml`)
+Anti-patterns and failures from retrospectives are extracted into a structured YAML store. Deduplicated by description similarity, with occurrence counts tracked across sessions. Patterns with 3+ occurrences auto-promote to relevant knowledge slices with `[LEARNED]` tags. Grep-queryable by category, tech stack, and failure type.
 
-The hook re-injects the E2E tester dispatch prompt automatically. There is no way to skip this gate except the wall-clock timeout.
+#### Agent Performance Scoring (`learning/agent-scores.yaml`)
+Rolling averages for success rate, cycles to pass, and tokens consumed — tracked per agent and per model (opus vs sonnet). Per-agent strengths and weaknesses tracked by finding category. Scores require 5+ data points before surfacing. The orchestrator consults scores to make smarter routing and dispatch decisions.
 
-### Frontend Self-Verification (v3.4)
+#### Score-Based Finding Routing
+Reviewer and auditor findings are routed to the agent most likely to fix them based on historical success rates. A 10-category taxonomy (css-styling, wallet-connect, contract-logic, abi-mismatch, network-config, deployment, testing, security, build-errors, backend-api) maps findings to agents via keyword matching against their strengths and weaknesses. Falls back to keyword routing when agents have fewer than 5 sessions of data.
 
+#### Project-Type Profiles (`learning/profiles/`)
+Auto-generated after 5+ completed sessions of the same project type. Profiles include common pitfalls pre-loaded from the pattern store, recommended agent config (model, max_cycles), and suggested challenge gates to skip. Regenerated at session thresholds (5, 10, 20, 50). The orchestrator loads matching profiles during both challenge and build phases.
+
+### Enforcement
+
+The plugin doesn't just tell agents what to do — it enforces compliance at the shell level. Instructions can be ignored; shell hooks cannot.
+
+#### E2E Testing Hard Gate
+The stop-hook physically blocks loop exit (exit code 2) when an OPNet contract has been deployed but no passing `e2e-results.json` exists. The hook re-injects the E2E tester dispatch prompt automatically. There is no way to skip this gate except the wall-clock timeout.
+
+#### Frontend Self-Verification
 Before the frontend-dev agent can declare success, it must pass three checks:
-
 1. **Build pipeline** — `npm run lint` + `npm run typecheck` + `npm run build` (zero errors)
 2. **Runtime smoke check** — starts Vite dev server, runs Playwright headless against localhost, verifies no console errors, dark background, visible content
 3. **Pre-flight anti-pattern scan** — 10 grep-based checks against `src/`: Buffer usage, private key leaks, wrong network, forbidden `approve()`, spinners, emojis, hardcoded colors, missing meta tags, static feeRate, missing explorer links
 
-### State Guards
+#### State Guards
+`guard-state.sh` (PreToolUse hook) blocks direct Write/Edit to state files during active loops. `guard-state-bash.sh` blocks Bash redirects targeting state files. All state mutations go through `scripts/write-state.sh` (temp file + atomic rename).
 
-- `guard-state.sh` (PreToolUse hook) blocks direct Write/Edit to state files during active loops
-- `guard-state-bash.sh` blocks Bash redirects targeting state files
-- All state mutations go through `scripts/write-state.sh` (temp file + atomic rename)
-
-### PUA Pressure Escalation (v3.3)
-
+#### PUA Pressure Escalation
 When the build-review loop cycles, debugging requirements escalate:
 
 | Cycle | Level | Requirement |
@@ -184,6 +169,30 @@ When the build-review loop cycles, debugging requirements escalate:
 | 2 | Elevated | 3 different hypotheses per issue, no repeating failed approaches |
 | 3 | Mandatory Checklist | 7-Point Checklist for every finding, report completion |
 | 4+ | Last Chance | Full checklist + consider completely different approach or structured failure report |
+
+### Cross-Layer Integration
+
+#### Cross-Layer Validator
+A READ-ONLY agent that validates ABI-to-frontend method mapping, parameter types, contract addresses, network config, signer configuration, and event names. Runs after all builders but before the auditor — catches integration mismatches early. 8 mismatch types with detection rules and routing decisions.
+
+#### Issue Bus
+When an agent discovers a problem in another layer (e.g., frontend-dev finds the contract ABI is missing a method), it writes a typed issue to `artifacts/issues/`. The orchestrator routes the issue to the responsible agent. Re-dispatch limit: 2 cycles per agent pair before deferring to the auditor.
+
+Issue types: `ABI_MISMATCH`, `MISSING_METHOD`, `TYPE_MISMATCH`, `ADDRESS_FORMAT`, `NETWORK_CONFIG`, `DEPENDENCY_MISSING`.
+
+### Resilience
+
+#### Checkpointing and Resume
+Every phase transition saves position to `checkpoint.md` with phases completed, agents finished, key decisions, and next action. If the loop is interrupted (context exhaustion, wall-clock timeout, manual cancel), run `/buidl-resume` to continue from the last checkpoint. Session state, worktree, and all artifacts are preserved.
+
+#### Atomic State Management
+All state mutations go through `scripts/write-state.sh`, which writes to a temp file then atomically renames. Guard hooks block direct writes. No raw `sed -i` on state files.
+
+#### Cost Tracking
+Token spend per agent logged to `cost-ledger.md`. Budget enforcement with `--max-tokens N`. The orchestrator checks elapsed time and token spend before each agent dispatch.
+
+#### Starter Templates
+Pre-built project scaffolds for common OPNet patterns (OP-20 token included). Template manifests with customization points (token name, symbol, decimals, features). Includes contract, tests, frontend, hooks, and build config. The orchestrator detects matching templates and offers them during the spec phase.
 
 ## Knowledge System
 
@@ -277,43 +286,6 @@ The auditor and reviewer check for 27 confirmed vulnerability patterns extracted
    FAIL --> findings routed to responsible agents, loop continues
 ```
 
-### Cross-Layer Issue Resolution
-
-When an agent discovers a problem in another layer (e.g., frontend-dev finds the contract ABI is missing a method), it writes a typed issue to `artifacts/issues/`. The orchestrator routes the issue to the responsible agent. Re-dispatch limit: 2 cycles per agent pair before deferring to the auditor.
-
-Issue types: `ABI_MISMATCH`, `MISSING_METHOD`, `TYPE_MISMATCH`, `ADDRESS_FORMAT`, `NETWORK_CONFIG`, `DEPENDENCY_MISSING`.
-
-### Interruption Recovery
-
-If the loop is interrupted (context exhaustion, wall-clock timeout, manual cancel), run `/buidl-resume` to continue from the last checkpoint. Session state, worktree, and all artifacts are preserved.
-
-## Resilience Features
-
-| Feature | Version | Description |
-|---------|---------|-------------|
-| Atomic state writes | v3.0 | All mutations through write-state.sh (temp + mv). Guard hooks block direct writes. |
-| Checkpointing | v3.0 | Every phase transition saves position. Resume from any point. |
-| Wall-clock timeout | v3.0 | Configurable max duration (default 60 min). Graceful save on timeout. |
-| Cost tracking | v3.0 | Token spend per agent in cost-ledger.md. Budget enforcement with --max-tokens. |
-| Learning system | v3.0 | Retrospectives saved to learning/. Future sessions consult past lessons. |
-| Adaptive learning | v3.5 | Pattern extraction, agent scoring, auto-promotion to knowledge slices. |
-| Cross-layer validation | v3.5 | ABI-to-frontend/backend integration checking between build and audit. |
-| Starter templates | v3.5 | Pre-built scaffolds for OP-20 tokens (more planned). |
-| Score-based routing | v3.6 | Finding routing based on agent strengths/weaknesses + historical success rates. |
-| Project-type profiles | v3.6 | Auto-generated project configs after 5+ sessions of the same type. |
-| Dynamic agents | v3.0 | Non-OPNet projects generate domain agents from templates. |
-| On-chain E2E testing | v3.2 | Real transactions with test wallets. Every method tested. Multi-wallet flows. |
-| PUA methodology | v3.3 | Exhaustive problem-solving with anti-rationalization and pressure escalation. |
-| GSD-2 debugging | v3.3 | Hypothesis-first debugging, one variable at a time, structured failure reports. |
-| E2E hard gate | v3.4 | Shell-level enforcement: loop cannot exit until on-chain tests pass. |
-| Frontend smoke check | v3.4 | Playwright runtime verification before declaring frontend success. |
-| Pre-flight scan | v3.4 | 10 anti-pattern grep checks block completion on known bad patterns. |
-| Agent self-critique | v4.0 | Builder agents re-check output against spec before declaring done. Writes self-critique.md artifact. |
-| Incremental audit | v4.0 | Cycle 2+ audits focus on git diff + blast radius instead of full codebase re-scan. |
-| Dry-run mode | v4.0 | Preview execution plan without dispatching agents. |
-| Execution tracing | v4.0 | JSONL trace log of all agent dispatches, completions, routing, and errors. |
-| Dynamic re-planning | v4.0 | Queries learned patterns for known fixes when agents fail. |
-
 ## Project Structure
 
 ```
@@ -321,11 +293,11 @@ buidl/
 +-- .claude-plugin/
 |   +-- plugin.json              # Plugin manifest (v4.0.0)
 +-- agents/                      # 12 agent definitions (incl. cross-layer-validator)
-+-- commands/                    # 8 slash commands (incl. buidl-trace)
++-- commands/                    # 9 slash commands (incl. buidl-trace)
 +-- hooks/                       # Stop hook + state guards
 |   +-- scripts/
 +-- knowledge/                   # OPNet reference + domain slices
-|   +-- slices/                  # 10 knowledge slices
+|   +-- slices/                  # 11 knowledge slices
 +-- learning/                    # Patterns, agent scores, profiles, retrospectives
 |   +-- patterns.yaml            # Structured pattern store (auto-updated)
 |   +-- agent-scores.yaml        # Agent performance metrics (auto-updated)
@@ -337,7 +309,7 @@ buidl/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 330+ structural + functional + integration tests
++-- tests/                       # 347 structural + functional + integration tests
 ```
 
 ## Testing
@@ -346,46 +318,50 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-330+ tests across 34 categories:
-
-| Category | What it checks |
-|----------|----------------|
-| Shell syntax | `bash -n` on all 5 scripts |
-| Shell correctness | write-state.sh usage, atomic patterns, no literal `\n` |
-| Agent structure | 5 required sections in all 11 agents |
-| FORBIDDEN blocks | Present in all 6 specialist agents |
-| Knowledge refs | All slice paths resolve to existing files |
-| Issue bus schema | 7 issue types consistent across 4 agents |
-| Version consistency | plugin.json matches CHANGELOG first entry |
-| File existence | All required files (agents, commands, scripts, knowledge, templates) |
-| State guard | guard-state.sh + guard-state-bash.sh active phase coverage |
-| Resume command | Dual state file support, checkpoint reference |
-| Learning system | Directory structure, pruning, retrospective integration |
-| Templates | Placeholder validation in domain-agent + knowledge-slice |
-| Cost tracking | Ledger format, token budget enforcement |
-| Wall-clock timeout | Cross-platform date handling, max_duration initialization |
-| max_turns | Agent dispatch limits, structured error handling |
-| Dual state files | state.yaml + state.local.md support across all commands |
-| Integration tests | 10 real write-state.sh tests (full, partial, nested, error cases) |
-| Transaction simulation | Knowledge slice existence and section coverage |
-| Playwright E2E | Puppeteer banned, Playwright patterns in UI tester + knowledge |
-| Auto-detect session | Existing session detection with resume/cancel options |
-| Learning pruning | Cap at 20 retrospectives |
-| Orphan worktrees | Detection in status, cleanup in clean |
-| Guard-state-bash | Bash tool redirect blocking |
-| Adaptive learning | Pattern store schema, extraction scripts, agent scores format |
-| Cross-layer validator | Agent definition, knowledge slice, mismatch type coverage |
-| Starter templates | Template manifest, contract template, frontend template, hook files |
-| Score-based routing | Taxonomy, keyword matching, candidate validation, functional routing tests |
-| Project-type profiles | Schema, threshold generation, profile YAML validation, functional profile tests |
-| Self-critique | Self-Critique step in all 4 builder agents, self-critique.md artifact reference |
-| Incremental audit | Incremental Audit Mode in auditor, git diff in buidl.md cycle 2 section |
-| Dry-run mode | --dry-run flag parsing, execution plan output |
-| Agent tracing | trace-event.sh exists, syntax, executable, functional JSON append test |
-| Dynamic re-planning | query-pattern.sh exists, syntax, executable, functional pattern query test |
-| Version 4.0.0 | plugin.json version matches CHANGELOG first entry |
+347 tests across 34 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, self-critique, incremental audit, dry-run mode, agent tracing, and dynamic re-planning.
 
 Tests run automatically on every push and PR via GitHub Actions.
+
+---
+
+## Version History
+
+### v4.0.0 — Agent Intelligence (2026-03-13)
+Five features that close gaps in the agent intelligence loop: **self-critique** catches spec drift before the reviewer does, saving entire review cycles. **Incremental audit** avoids re-scanning unchanged code on fix cycles. **Dry-run mode** lets you preview the execution plan before committing. **Execution tracing** provides full observability into agent dispatch ordering. **Dynamic re-planning** applies lessons from past failures automatically.
+
+### v3.6.0 — Smart Routing (2026-03-13)
+**Score-based finding routing** means the plugin doesn't just track which agents succeed — it uses that data to route findings to the agent most likely to fix them. **Project-type profiles** mean the 6th OP-20 token build starts with knowledge of what went wrong in the first 5.
+
+### v3.5.0 — Adaptive Learning (2026-03-13)
+The plugin had a learning system that saved retrospectives but barely used them. This release adds a real feedback loop: **pattern extraction** and **agent scoring** turn every session's lessons into structured data injected into future agent prompts. **Cross-layer validation** catches the #1 source of wasted cycles (ABI mismatches) before they reach expensive downstream agents. **Starter templates** eliminate boilerplate for common project types.
+
+### v3.4.0 — Hard Gates (2026-03-13)
+Two persistent pain points solved with shell-level enforcement: (1) Agents would deploy contracts and declare success without testing them on-chain, despite "MANDATORY" in the orchestrator instructions. The **E2E testing hard gate** in the stop-hook now physically blocks exit until on-chain tests pass. (2) Frontend output consistently had runtime bugs that only surfaced during UI testing. The **runtime smoke check** and **pre-flight anti-pattern scan** catch these inside the frontend-dev agent itself.
+
+### v3.3.0 — PUA Methodology (2026-03-13)
+AI agents frequently give up too early on fixable problems. **PUA's structured escalation** and **GSD-2 debugging discipline** force agents to exhaust all options systematically before escalating. **Pressure escalation** in the stop-hook ensures debugging requirements become more rigorous as cycles progress, not more lenient.
+
+### v3.2.0 — On-Chain E2E Testing (2026-03-07)
+The Nexus marketplace C-02 bug proved that simulation-passing code can fail on-chain. The **E2E tester agent** sends real transactions with real testnet BTC, testing every public method with block confirmations. The user never has to manually test contract interactions again.
+
+### v3.1.0 — Robustness (2026-03-04)
+Bash tool guard, nested YAML support, auto-detect existing sessions, learning pruning, orphan worktree detection, transaction simulation knowledge, Playwright migration, and 10 real integration tests for write-state.sh.
+
+### v3.0.0 — The Loop (2026-03-04)
+Foundation release: atomic state management, state guard hooks, wall-clock timeout, checkpointing, resume command, cost tracking, learning system, retrospectives, dynamic agent generation, max_turns, structured error handling, and context pressure detection.
+
+### v2.1.0 — Testing and CI (2026-03-03)
+Structural test suite, GitHub Actions CI/CD, inter-agent issue bus, FORBIDDEN rules for all specialist agents, model selection flags, standalone audit skill, and loop-guide skill.
+
+### v2.0.0 — Multi-Agent OPNet (2026-03-02)
+Multi-agent orchestration for OPNet dApps (6 specialist agents), 27 real-bug audit patterns from btc-vision repos, knowledge slice system, and OPNet-specific stop-hook branching.
+
+### v1.0.0 — Initial Release (2026-03-02)
+Core loop system: challenge, specify, explore, build, review.
+
+---
+
+Full changelog with detailed Added/Changed/Why sections: [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
