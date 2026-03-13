@@ -123,9 +123,9 @@ Then proceed to UI testing and review."
     exit 2
   fi
 
-  # E2E results exist — check if they passed
+  # E2E results exist — check if they passed (allowlist "pass", block everything else)
   E2E_STATUS=$(python3 -c "import json; print(json.load(open('$E2E_RESULTS')).get('status','unknown'))" 2>/dev/null || echo "unknown")
-  if [[ "$E2E_STATUS" == "fail" ]]; then
+  if [[ "$E2E_STATUS" != "pass" ]]; then
     E2E_FAIL_PROMPT="E2E TESTING FAILED. On-chain tests found real bugs in the deployed contract.
 
 Review the failures in: $E2E_RESULTS

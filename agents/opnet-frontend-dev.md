@@ -160,9 +160,10 @@ After build passes, you MUST verify the frontend actually works at runtime. This
 npm install -D @playwright/test 2>/dev/null
 npx playwright install chromium 2>/dev/null
 
-# 2. Start dev server in background
+# 2. Start dev server in background (with trap for cleanup)
 npx vite --port 5173 &
 DEV_PID=$!
+trap 'kill $DEV_PID 2>/dev/null' EXIT
 for i in $(seq 1 30); do curl -s http://localhost:5173 >/dev/null 2>&1 && break; sleep 1; done
 
 # 3. Run the smoke check (inline script)
@@ -222,8 +223,8 @@ Before writing build-result.json, scan your own source code for the top 10 anti-
 Run these checks against `src/`:
 
 ```bash
-# 1. Buffer usage (FORBIDDEN)
-grep -rn "Buffer\." src/ && echo "FAIL: Buffer usage found" && exit 1
+# 1. Buffer usage (FORBIDDEN — use Uint8Array + BufferHelper)
+grep -rn "Buffer\.from\|Buffer\.alloc\|Buffer\.concat\|Buffer\.isBuffer\|new Buffer" src/ && echo "FAIL: Buffer usage found" && exit 1
 
 # 2. Private key leak (signer !== null on frontend)
 grep -rn "signer:" src/ | grep -v "null" | grep -v "//" && echo "FAIL: signer is not null" && exit 1
