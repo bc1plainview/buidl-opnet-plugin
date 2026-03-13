@@ -1149,6 +1149,38 @@ else
   fail "route-finding.sh does NOT return expected format"
 fi
 
+# Functional: CSS finding routes to frontend-dev (keyword fallback)
+ROUTE_CSS=$(bash scripts/route-finding.sh "CSS layout broken in the token card" "opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev" 2>/dev/null)
+if echo "$ROUTE_CSS" | grep -q 'opnet-frontend-dev'; then
+  pass "CSS finding routes to opnet-frontend-dev"
+else
+  fail "CSS finding did NOT route to opnet-frontend-dev (got: $ROUTE_CSS)"
+fi
+
+# Functional: contract finding routes to contract-dev
+ROUTE_CONTRACT=$(bash scripts/route-finding.sh "storage slot collision in transfer function" "opnet-contract-dev,opnet-frontend-dev" 2>/dev/null)
+if echo "$ROUTE_CONTRACT" | grep -q 'opnet-contract-dev'; then
+  pass "Contract finding routes to opnet-contract-dev"
+else
+  fail "Contract finding did NOT route to opnet-contract-dev (got: $ROUTE_CONTRACT)"
+fi
+
+# Functional: non-OPNet candidates fall back to first candidate (not hardcoded agent)
+ROUTE_GENERIC=$(bash scripts/route-finding.sh "generic problem" "my-builder,my-reviewer" 2>/dev/null)
+if echo "$ROUTE_GENERIC" | grep -q 'my-builder'; then
+  pass "Generic finding falls back to first candidate (not hardcoded agent)"
+else
+  fail "Generic finding did NOT fall back to first candidate (got: $ROUTE_GENERIC)"
+fi
+
+# Functional: preferred agent not in candidates falls back to first candidate
+ROUTE_FALLBACK=$(bash scripts/route-finding.sh "CSS style issue" "agent-a,agent-b" 2>/dev/null)
+if echo "$ROUTE_FALLBACK" | grep -q 'agent-a'; then
+  pass "Preferred agent not in candidates falls back to first candidate"
+else
+  fail "Preferred agent not in candidates did NOT fall back (got: $ROUTE_FALLBACK)"
+fi
+
 # TEST-10: Category taxonomy exists in route-finding.sh
 if grep -q 'CATEGORIES=' scripts/route-finding.sh; then
   pass "route-finding.sh contains category taxonomy"
@@ -1287,6 +1319,128 @@ if [[ "$PLUGIN_VERSION" == "$CHANGELOG_VERSION" ]]; then
 else
   fail "plugin.json version ($PLUGIN_VERSION) does NOT match CHANGELOG ($CHANGELOG_VERSION)"
 fi
+
+# ─────────────────────────────────────────────────
+# Functional: update-scores.sh --findings
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: update-scores.sh --findings ==="
+
+# Create temp state and findings files, backup agent-scores.yaml
+FUNC_TMPDIR=$(mktemp -d)
+SCORES_BACKUP="$FUNC_TMPDIR/agent-scores-backup.yaml"
+cp learning/agent-scores.yaml "$SCORES_BACKUP"
+
+# Create a minimal state file with a dispatched agent
+cat > "$FUNC_TMPDIR/state.yaml" << 'STATEEOF'
+cycle: 1
+tokens_used: 5000
+builder_model: sonnet
+agent_status:
+  opnet-frontend-dev: done
+STATEEOF
+
+# Create a findings file with categorized findings
+cat > "$FUNC_TMPDIR/findings.txt" << 'FINDEOF'
+agent: opnet-frontend-dev | category: css-styling | outcome: fixed
+agent: opnet-frontend-dev | category: wallet-connect | outcome: failed
+FINDEOF
+
+# Run update-scores.sh with --findings
+if bash scripts/update-scores.sh "$FUNC_TMPDIR/state.yaml" "pass" --findings "$FUNC_TMPDIR/findings.txt" >/dev/null 2>&1; then
+  pass "update-scores.sh --findings runs without error"
+else
+  fail "update-scores.sh --findings failed to run"
+fi
+
+# Check that strengths now includes css-styling
+if python3 -c "
+import yaml, sys
+with open('learning/agent-scores.yaml') as f:
+    data = yaml.safe_load(f)
+agent = data.get('agents', {}).get('opnet-frontend-dev', {})
+strengths = agent.get('strengths', [])
+weaknesses = agent.get('weaknesses', [])
+assert 'css-styling' in strengths, f'css-styling not in strengths: {strengths}'
+assert 'wallet-connect' in weaknesses, f'wallet-connect not in weaknesses: {weaknesses}'
+assert agent.get('sessions_completed', 0) == 1, f'sessions_completed should be 1'
+" 2>&1; then
+  pass "update-scores.sh --findings correctly updates strengths and weaknesses"
+else
+  fail "update-scores.sh --findings did NOT correctly update strengths/weaknesses"
+fi
+
+# Restore agent-scores.yaml
+cp "$SCORES_BACKUP" learning/agent-scores.yaml
+
+# ─────────────────────────────────────────────────
+# Functional: generate-profiles.sh at 5-session threshold
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: generate-profiles.sh ==="
+
+# Create 5 mock retrospective files in learning/ (unique test type to avoid collisions)
+MOCK_TYPE="functest-xyzzy"
+for i in 1 2 3 4 5; do
+  cat > "learning/mock-test-session-$i.md" << RETROEOF
+# Retrospective: mock-session-$i
+Date: 2026-03-0$i
+Project Type: $MOCK_TYPE
+Outcome: PASS on cycle 1
+Tokens Used: 5000
+Duration: 10
+
+## What Worked
+- Test worked
+
+## What Failed
+- Nothing
+
+## Anti-Patterns
+- None
+RETROEOF
+done
+
+# Remove any existing test profile
+rm -f "learning/profiles/$MOCK_TYPE.yaml"
+
+# Run generate-profiles.sh
+PROFILE_OUTPUT=$(bash scripts/generate-profiles.sh 2>&1)
+if echo "$PROFILE_OUTPUT" | grep -qi "Generated profile.*$MOCK_TYPE\|profile generation complete"; then
+  pass "generate-profiles.sh generates profile at 5-session threshold"
+else
+  fail "generate-profiles.sh did NOT generate profile at threshold (output: $PROFILE_OUTPUT)"
+fi
+
+# Check that profile YAML was created with expected fields
+if [[ -f "learning/profiles/$MOCK_TYPE.yaml" ]]; then
+  if python3 -c "
+import yaml, sys
+mock_type = sys.argv[1]
+with open(f'learning/profiles/{mock_type}.yaml') as f:
+    profile = yaml.safe_load(f)
+assert profile.get('project_type') == mock_type, f'project_type wrong: {profile.get(\"project_type\")}'
+assert profile.get('sessions_count') == 5, f'sessions_count wrong: {profile.get(\"sessions_count\")}'
+assert 'recommended_config' in profile, 'missing recommended_config'
+assert 'common_pitfalls' in profile, 'missing common_pitfalls'
+assert 'build_vs_buy' in profile['recommended_config'].get('skip_challenge_gates', []), 'missing skip gate'
+" "$MOCK_TYPE" 2>&1; then
+    pass "generate-profiles.sh produces valid profile YAML with correct schema"
+  else
+    fail "generate-profiles.sh profile YAML has incorrect schema"
+  fi
+else
+  fail "generate-profiles.sh did NOT create learning/profiles/$MOCK_TYPE.yaml"
+fi
+
+# Clean up mock retrospectives and generated profile
+for i in 1 2 3 4 5; do
+  rm -f "learning/mock-test-session-$i.md"
+done
+rm -f "learning/profiles/$MOCK_TYPE.yaml"
+
+# Clean up temp dir
+rm -rf "$FUNC_TMPDIR"
 
 # ─────────────────────────────────────────────────
 # Summary

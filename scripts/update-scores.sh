@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --findings)
       FINDINGS_FILE="${2:-}"
-      shift 2
+      shift 2 2>/dev/null || shift 1 2>/dev/null || true
       ;;
     *)
       shift

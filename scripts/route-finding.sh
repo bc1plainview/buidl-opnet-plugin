@@ -27,28 +27,40 @@ if [[ -z "$FINDING" || -z "$CANDIDATES" ]]; then
   exit 1
 fi
 
+# Helper: check if an agent name is in the candidates list
+candidate_or_first() {
+  local preferred="$1"
+  local candidates_str="$2"
+  local first=$(echo "$candidates_str" | cut -d',' -f1)
+  if echo ",$candidates_str," | grep -q ",$preferred,"; then
+    echo "$preferred"
+  else
+    echo "$first"
+  fi
+}
+
 # If scores file doesn't exist, fall back to keyword routing
 if [[ ! -f "$SCORES_FILE" ]]; then
   echo "FALLBACK: No agent-scores.yaml found" >&2
-  # Keyword fallback
+  # Keyword fallback — always check preferred agent against candidate list
   FINDING_LOWER=$(echo "$FINDING" | tr '[:upper:]' '[:lower:]')
   FIRST_CANDIDATE=$(echo "$CANDIDATES" | cut -d',' -f1)
   if echo "$FINDING_LOWER" | grep -qiE "css|style|layout|color|font|responsive|animation|ui|render|display|dark.?mode|glass"; then
-    echo "opnet-frontend-dev|0.5|keyword-match:css-styling"
+    echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.5|keyword-match:css-styling"
   elif echo "$FINDING_LOWER" | grep -qiE "contract|storage|selector|event|mint|burn|transfer|allowance|op-?20|op-?721|wasm|assembly"; then
-    echo "opnet-contract-dev|0.5|keyword-match:contract-logic"
+    echo "$(candidate_or_first opnet-contract-dev "$CANDIDATES")|0.5|keyword-match:contract-logic"
   elif echo "$FINDING_LOWER" | grep -qiE "api|server|websocket|database|rate.?limit|express|mongo|endpoint|cors"; then
-    echo "opnet-backend-dev|0.5|keyword-match:backend-api"
+    echo "$(candidate_or_first opnet-backend-dev "$CANDIDATES")|0.5|keyword-match:backend-api"
   elif echo "$FINDING_LOWER" | grep -qiE "deploy|gas|utxo|broadcast|transaction.?factory"; then
-    echo "opnet-deployer|0.5|keyword-match:deployment"
+    echo "$(candidate_or_first opnet-deployer "$CANDIDATES")|0.5|keyword-match:deployment"
   elif echo "$FINDING_LOWER" | grep -qiE "test|e2e|playwright|smoke|assertion"; then
-    echo "opnet-e2e-tester|0.5|keyword-match:testing"
+    echo "$(candidate_or_first opnet-e2e-tester "$CANDIDATES")|0.5|keyword-match:testing"
   elif echo "$FINDING_LOWER" | grep -qiE "wallet|signer|connect|provider|network|rpc"; then
-    echo "opnet-frontend-dev|0.5|keyword-match:wallet-connect"
+    echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.5|keyword-match:wallet-connect"
   elif echo "$FINDING_LOWER" | grep -qiE "abi|mismatch|parameter|type.?error|interface"; then
-    echo "cross-layer-validator|0.5|keyword-match:abi-mismatch"
+    echo "$(candidate_or_first cross-layer-validator "$CANDIDATES")|0.5|keyword-match:abi-mismatch"
   elif echo "$FINDING_LOWER" | grep -qiE "security|injection|overflow|reentrancy|private.?key|leak"; then
-    echo "opnet-auditor|0.5|keyword-match:security"
+    echo "$(candidate_or_first opnet-auditor "$CANDIDATES")|0.5|keyword-match:security"
   else
     echo "$FIRST_CANDIDATE|0.3|keyword-match:default"
   fi
@@ -152,9 +164,12 @@ for agent_name in candidates:
     if score > best_score:
         best_score = score
         best_agent = agent_name
-        if matched_category in [s for s in strengths]:
+        # Use same substring matching as boost/penalty logic above
+        is_strength = any(matched_category in s or s in matched_category for s in strengths)
+        is_weakness = any(matched_category in w or w in matched_category for w in weaknesses)
+        if is_strength:
             best_reason = f'score-based:strength-match:{matched_category}'
-        elif matched_category in [w for w in weaknesses]:
+        elif is_weakness:
             best_reason = f'score-based:despite-weakness:{matched_category}'
         else:
             best_reason = f'score-based:highest-overall:{matched_category}'
@@ -168,26 +183,25 @@ else:
 " "$SCORES_FILE" "$CANDIDATES" "$MATCHED_CATEGORY" 2>/dev/null || echo "FALLBACK")
 
 if [[ "$RESULT" == "FALLBACK" ]]; then
-  # Keyword-based fallback using the matched category
+  # Keyword-based fallback — always check preferred agent against candidate list
   FIRST_CANDIDATE=$(echo "$CANDIDATES" | cut -d',' -f1)
   case "$MATCHED_CATEGORY" in
     css-styling|wallet-connect)
-      echo "opnet-frontend-dev|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     contract-logic)
-      echo "opnet-contract-dev|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-contract-dev "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     backend-api)
-      echo "opnet-backend-dev|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-backend-dev "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     abi-mismatch)
-      # Could be frontend or contract — route to frontend first (more likely caller error)
-      echo "opnet-frontend-dev|0.4|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.4|keyword-fallback:$MATCHED_CATEGORY" ;;
     network-config)
-      echo "opnet-frontend-dev|0.4|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.4|keyword-fallback:$MATCHED_CATEGORY" ;;
     deployment)
-      echo "opnet-deployer|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-deployer "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     testing)
-      echo "opnet-e2e-tester|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-e2e-tester "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     security)
-      echo "opnet-auditor|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
+      echo "$(candidate_or_first opnet-auditor "$CANDIDATES")|0.5|keyword-fallback:$MATCHED_CATEGORY" ;;
     build-errors)
       echo "$FIRST_CANDIDATE|0.4|keyword-fallback:$MATCHED_CATEGORY" ;;
     *)
