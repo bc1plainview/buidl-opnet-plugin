@@ -1038,7 +1038,8 @@ After Phase 5 review completes (every cycle), parse the reviewer's findings and 
 ```
 
 4. Status values: `OPEN` (new finding), `RESOLVED` (fixed in a later cycle), `REGRESSION` (was resolved but reappeared).
-5. For cycle 2+ reviewer dispatch: include the ledger in the prompt with instruction: "Check all RESOLVED findings for regression. Mark regressions as CRITICAL with [REGRESSION] tag."
+5. **3-cycle archiving rule**: For findings where `(current_cycle - cycle_found) > 3`, move them to an "Archived Findings" section at the bottom of the ledger. Archived findings are not checked for regression — they are historical records only.
+6. For cycle 2+ reviewer dispatch: include the ledger in the prompt with instruction: "Check all RESOLVED findings for regression. Mark regressions as CRITICAL with [REGRESSION] tag."
 
 ### Structured Failure Diagnosis
 

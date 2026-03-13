@@ -39,9 +39,9 @@ Elapsed:      [computed from started_at, or "unknown"]
    Findings:       [N open / N resolved / N regression]
    ```
 6. If there are review files in the session directory, show the latest verdict.
-5. If a checkpoint file exists at `.claude/loop/sessions/<name>/checkpoint.md`, show the last checkpoint timestamp and next action.
-6. If the status is `done`, `failed`, `cancelled`, or `timed_out`, include the summary.
-7. **Orphan worktree detection**: Run `git worktree list` and cross-reference with the active state:
+7. If a checkpoint file exists at `.claude/loop/sessions/<name>/checkpoint.md`, show the last checkpoint timestamp and next action.
+8. If the status is `done`, `failed`, `cancelled`, or `timed_out`, include the summary.
+9. **Orphan worktree detection**: Run `git worktree list` and cross-reference with the active state:
    - For each worktree under `.claude/worktrees/loop-*`, check if there's a matching session in state.
    - If a worktree exists but no state file references it (or state is `done`/`cancelled`), flag it as orphaned:
    ```

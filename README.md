@@ -328,7 +328,7 @@ buidl/
 |   +-- pua/
 +-- templates/                   # Domain agent, knowledge slice, starter templates
 |   +-- starters/                # Project scaffolds (op20-token, more planned)
-+-- tests/                       # 395+ structural + functional + integration tests
++-- tests/                       # 419 structural + functional + integration tests
 ```
 
 ## Testing
@@ -337,7 +337,7 @@ buidl/
 bash tests/plugin-tests.sh
 ```
 
-395+ tests across 50 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
+419 tests across 50 categories covering shell syntax, agent structure, FORBIDDEN blocks, knowledge references, issue bus schema, version consistency, state guards, resume logic, learning system, templates, cost tracking, wall-clock timeout, max_turns, integration tests, transaction simulation, Playwright E2E, adaptive learning, cross-layer validation, starter templates, score-based routing, project-type profiles, cross-agent critique, incremental audit, dry-run mode, agent tracing, dynamic re-planning, acceptance test locking, ABI-lock, adversarial auditing, adversarial E2E testing, failure diagnosis, findings ledger, chain probe, hard gate enforcement, and regression tracking.
 
 Tests run automatically on every push and PR via GitHub Actions.
 
@@ -349,7 +349,7 @@ Tests run automatically on every push and PR via GitHub Actions.
 Nine correctness, reliability, and coverage fixes from an external audit: **acceptance test locking** prevents builders from modifying verification criteria. **ABI-lock checkpoint** prevents frontend/backend drift. **Adversarial auditing** tests invariants with attack sequences. **Adversarial E2E testing** sends real edge-case transactions. **Failure diagnosis** classifies root causes when cycles are exhausted. **Findings ledger** tracks resolution and detects regressions. **Chain probe** fetches live gas parameters. **Cross-agent critique** replaces self-critique with independent verification. **Hard gate enforcement** ensures critical gates cannot be skipped.
 
 ### v4.0.0 — Agent Intelligence (2026-03-13)
-Five features that close gaps in the agent intelligence loop: **incremental audit** avoids re-scanning unchanged code on fix cycles. **Dry-run mode** lets you preview the execution plan before committing. **Execution tracing** provides full observability into agent dispatch ordering. **Dynamic re-planning** applies lessons from past failures automatically.
+Five features that close gaps in the agent intelligence loop: **self-critique** catches spec drift before the reviewer does (replaced by cross-agent critique in v5.0.0). **Incremental audit** avoids re-scanning unchanged code on fix cycles. **Dry-run mode** lets you preview the execution plan before committing. **Execution tracing** provides full observability into agent dispatch ordering. **Dynamic re-planning** applies lessons from past failures automatically.
 
 ### v3.6.0 — Smart Routing (2026-03-13)
 **Score-based finding routing** means the plugin doesn't just track which agents succeed — it uses that data to route findings to the agent most likely to fix them. **Project-type profiles** mean the 6th OP-20 token build starts with knowledge of what went wrong in the first 5.

@@ -91,13 +91,22 @@ case "$RPC_URL" in
   *mainnet*) NETWORK="mainnet" ;;
 esac
 
+# Format block_height as proper JSON type (number if valid, string if unknown)
+if [[ "$BLOCK_HEIGHT" =~ ^[0-9]+$ ]]; then
+  BLOCK_HEIGHT_JSON="$BLOCK_HEIGHT"
+else
+  BLOCK_HEIGHT_JSON="\"$BLOCK_HEIGHT\""
+fi
+
 # Write successful probe result
+# max_contract_size_bytes: 400KB known OPNet constant
 cat > "$OUTPUT_FILE" << EOF
 {
   "probe_status": "success",
   "rpc_url": "$RPC_URL",
   "network": "$NETWORK",
-  "block_height": "$BLOCK_HEIGHT",
+  "block_height": $BLOCK_HEIGHT_JSON,
+  "max_contract_size_bytes": 400000,
   "gas_parameters": $GAS_INFO,
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
