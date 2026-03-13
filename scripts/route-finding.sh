@@ -45,21 +45,21 @@ if [[ ! -f "$SCORES_FILE" ]]; then
   # Keyword fallback — always check preferred agent against candidate list
   FINDING_LOWER=$(echo "$FINDING" | tr '[:upper:]' '[:lower:]')
   FIRST_CANDIDATE=$(echo "$CANDIDATES" | cut -d',' -f1)
-  if echo "$FINDING_LOWER" | grep -qiE "css|style|layout|color|font|responsive|animation|ui|render|display|dark.?mode|glass"; then
+  if echo "$FINDING_LOWER" | grep -qE "css|style|layout|color|font|responsive|animation|ui|render|display|dark.?mode|glass"; then
     echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.5|keyword-match:css-styling"
-  elif echo "$FINDING_LOWER" | grep -qiE "contract|storage|selector|event|mint|burn|transfer|allowance|op-?20|op-?721|wasm|assembly"; then
+  elif echo "$FINDING_LOWER" | grep -qE "contract|storage|selector|event|mint|burn|transfer|allowance|op-?20|op-?721|wasm|assembly"; then
     echo "$(candidate_or_first opnet-contract-dev "$CANDIDATES")|0.5|keyword-match:contract-logic"
-  elif echo "$FINDING_LOWER" | grep -qiE "api|server|websocket|database|rate.?limit|express|mongo|endpoint|cors"; then
+  elif echo "$FINDING_LOWER" | grep -qE "api|server|websocket|database|rate.?limit|express|mongo|endpoint|cors"; then
     echo "$(candidate_or_first opnet-backend-dev "$CANDIDATES")|0.5|keyword-match:backend-api"
-  elif echo "$FINDING_LOWER" | grep -qiE "deploy|gas|utxo|broadcast|transaction.?factory"; then
+  elif echo "$FINDING_LOWER" | grep -qE "deploy|gas|utxo|broadcast|transaction.?factory"; then
     echo "$(candidate_or_first opnet-deployer "$CANDIDATES")|0.5|keyword-match:deployment"
-  elif echo "$FINDING_LOWER" | grep -qiE "test|e2e|playwright|smoke|assertion"; then
+  elif echo "$FINDING_LOWER" | grep -qE "test|e2e|playwright|smoke|assertion"; then
     echo "$(candidate_or_first opnet-e2e-tester "$CANDIDATES")|0.5|keyword-match:testing"
-  elif echo "$FINDING_LOWER" | grep -qiE "wallet|signer|connect|provider|network|rpc"; then
+  elif echo "$FINDING_LOWER" | grep -qE "wallet|signer|connect|provider|network|rpc"; then
     echo "$(candidate_or_first opnet-frontend-dev "$CANDIDATES")|0.5|keyword-match:wallet-connect"
-  elif echo "$FINDING_LOWER" | grep -qiE "abi|mismatch|parameter|type.?error|interface"; then
+  elif echo "$FINDING_LOWER" | grep -qE "abi|mismatch|parameter|type.?error|interface"; then
     echo "$(candidate_or_first cross-layer-validator "$CANDIDATES")|0.5|keyword-match:abi-mismatch"
-  elif echo "$FINDING_LOWER" | grep -qiE "security|injection|overflow|reentrancy|private.?key|leak"; then
+  elif echo "$FINDING_LOWER" | grep -qE "security|injection|overflow|reentrancy|private.?key|leak"; then
     echo "$(candidate_or_first opnet-auditor "$CANDIDATES")|0.5|keyword-match:security"
   else
     echo "$FIRST_CANDIDATE|0.3|keyword-match:default"
@@ -72,10 +72,10 @@ fi
 # Categories are used to match against agent strengths/weaknesses.
 CATEGORIES=(
   "css-styling:css|style|layout|color|font|responsive|animation|ui|render|display|dark.?mode|glass"
-  "wallet-connect:wallet|signer|connect|provider|mldsaSigner|signing"
+  "wallet-connect:wallet|signer|connect|provider|mldsasigner|signing"
   "contract-logic:contract|storage|selector|event|mint|burn|transfer|allowance|op.?20|op.?721|wasm|assembly"
   "abi-mismatch:abi|mismatch|parameter|type.?error|interface|method.?not.?found"
-  "network-config:network|rpc|testnet|mainnet|opnetTestnet|provider.?url"
+  "network-config:network|rpc|testnet|mainnet|opnettestnet|provider.?url"
   "deployment:deploy|gas|utxo|broadcast|transaction.?factory"
   "testing:test|e2e|playwright|smoke|assertion|coverage"
   "security:security|injection|overflow|reentrancy|private.?key|leak|exploit|vulnerability"
@@ -96,7 +96,7 @@ for cat_entry in "${CATEGORIES[@]}"; do
   MATCH_COUNT=0
   IFS='|' read -ra KW_ARRAY <<< "$CAT_KEYWORDS"
   for kw in "${KW_ARRAY[@]}"; do
-    if echo "$FINDING_LOWER" | grep -qiE "$kw"; then
+    if echo "$FINDING_LOWER" | grep -qE "$kw"; then
       MATCH_COUNT=$((MATCH_COUNT + 1))
     fi
   done
