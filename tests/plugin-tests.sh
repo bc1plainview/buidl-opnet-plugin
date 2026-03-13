@@ -2713,6 +2713,139 @@ else
 fi
 
 # ─────────────────────────────────────────────────
+# v6-func-1: contract-dev outputs more than frontend-dev
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: Knowledge Slice Comparison ==="
+
+V6_CONTRACT_LINES=$(bash scripts/load-knowledge.sh opnet-contract-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
+V6_FRONTEND_LINES=$(bash scripts/load-knowledge.sh opnet-frontend-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
+
+if [[ "$V6_CONTRACT_LINES" -gt "$V6_FRONTEND_LINES" ]]; then
+  pass "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) > frontend-dev ($V6_FRONTEND_LINES lines)"
+else
+  fail "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) NOT > frontend-dev ($V6_FRONTEND_LINES lines)"
+fi
+
+# ─────────────────────────────────────────────────
+# v6-func-2: update-scores.sh --prune on empty scores file
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: Prune Empty Scores ==="
+
+PRUNE_TMPDIR=$(mktemp -d)
+
+# Create minimal state file
+cat > "$PRUNE_TMPDIR/state.yaml" << 'PRUNESTATE'
+cycle: 1
+tokens_used: 1000
+builder_model: sonnet
+agent_status:
+  loop-builder: done
+PRUNESTATE
+
+# Create empty agent-scores.yaml (just header comment)
+cat > "$PRUNE_TMPDIR/agent-scores.yaml" << 'PRUNEEMPTY'
+agents: {}
+PRUNEEMPTY
+
+# Backup real scores, swap in empty, run prune, restore
+PRUNE_SCORES_BACKUP="$PRUNE_TMPDIR/real-scores-backup.yaml"
+cp learning/agent-scores.yaml "$PRUNE_SCORES_BACKUP"
+cp "$PRUNE_TMPDIR/agent-scores.yaml" learning/agent-scores.yaml
+
+if bash scripts/update-scores.sh "$PRUNE_TMPDIR/state.yaml" "pass" --prune >/dev/null 2>&1; then
+  pass "v6-func-prune-empty: update-scores.sh --prune exits 0 on empty scores file"
+else
+  fail "v6-func-prune-empty: update-scores.sh --prune crashed on empty scores file"
+fi
+
+# Restore real scores
+cp "$PRUNE_SCORES_BACKUP" learning/agent-scores.yaml
+rm -rf "$PRUNE_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# v6-func-3: stale patterns excluded from load-knowledge.sh
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Functional: Stale Pattern Exclusion ==="
+
+STALE_TMPDIR=$(mktemp -d)
+
+# Backup real patterns.yaml
+STALE_PATTERNS_BACKUP="$STALE_TMPDIR/patterns-backup.yaml"
+cp learning/patterns.yaml "$STALE_PATTERNS_BACKUP"
+
+# Create patterns.yaml with one stale and one active pattern
+# Use a test-only agent name (falls through to *) so no slice and no bible are loaded.
+# Also swap troubleshooting with a stub so patterns section fits in 400-line cap.
+cat > learning/patterns.yaml << 'STALEEOF'
+patterns:
+  - id: PAT-L900
+    category: orchestration
+    tech_stack: [op20-token, generic]
+    failure_type: build_error
+    description: STALE_MARKER_SHOULD_NOT_APPEAR
+    fix: This pattern is stale
+    source_sessions: [old-session]
+    occurrence_count: 2
+    promoted_to_knowledge: false
+    first_seen: "2024-01-01"
+    last_seen: "2024-01-01"
+    last_seen_version: "4.0.0"
+    stale: true
+  - id: PAT-L901
+    category: orchestration
+    tech_stack: [op20-token, generic]
+    failure_type: build_error
+    description: ACTIVE_MARKER_SHOULD_APPEAR
+    fix: This pattern is active
+    source_sessions: [recent-session]
+    occurrence_count: 3
+    promoted_to_knowledge: false
+    first_seen: "2026-03-01"
+    last_seen: "2026-03-01"
+    last_seen_version: "6.0.0"
+    stale: false
+STALEEOF
+
+# Temporarily replace troubleshooting with a small stub so patterns have room
+STALE_TROUBLESHOOTING_BACKUP="$STALE_TMPDIR/troubleshooting-backup.md"
+cp knowledge/opnet-troubleshooting.md "$STALE_TROUBLESHOOTING_BACKUP"
+echo "# Troubleshooting Stub (for stale test)" > knowledge/opnet-troubleshooting.md
+
+STALE_OUTPUT=$(bash scripts/load-knowledge.sh test-stale-agent op20-token 2>/dev/null || true)
+
+# Restore troubleshooting immediately
+cp "$STALE_TROUBLESHOOTING_BACKUP" knowledge/opnet-troubleshooting.md
+
+STALE_FOUND=false
+if echo "$STALE_OUTPUT" | grep -q 'STALE_MARKER_SHOULD_NOT_APPEAR'; then
+  STALE_FOUND=true
+fi
+
+ACTIVE_FOUND=false
+if echo "$STALE_OUTPUT" | grep -q 'ACTIVE_MARKER_SHOULD_APPEAR'; then
+  ACTIVE_FOUND=true
+fi
+
+if [[ "$STALE_FOUND" == "false" ]]; then
+  pass "v6-func-stale-excluded: stale pattern text NOT in load-knowledge.sh output"
+else
+  fail "v6-func-stale-excluded: stale pattern text FOUND in load-knowledge.sh output"
+fi
+
+if [[ "$ACTIVE_FOUND" == "true" ]]; then
+  pass "v6-func-active-included: active pattern text IS in load-knowledge.sh output"
+else
+  fail "v6-func-active-included: active pattern text NOT in load-knowledge.sh output"
+fi
+
+# Restore real patterns.yaml
+cp "$STALE_PATTERNS_BACKUP" learning/patterns.yaml
+rm -rf "$STALE_TMPDIR"
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 echo ""

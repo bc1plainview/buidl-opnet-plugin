@@ -289,6 +289,7 @@ prune_log_file = sys.argv[2]
 with open(scores_file) as f:
     data = yaml.safe_load(f)
 
+data = data or {}
 agents = data.get('agents', {})
 pruned = []
 to_remove = []

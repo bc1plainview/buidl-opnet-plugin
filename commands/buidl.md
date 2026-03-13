@@ -899,7 +899,7 @@ The E2E tester:
 Update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=adversarial_testing status=adversarial_testing`
 
 Launch `opnet-adversarial-tester` agent:
-- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-e2e-tester <project-type>` (loads e2e-testing.md slice + bible + troubleshooting + patterns)
+- Knowledge: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-adversarial-tester <project-type>` (loads e2e-testing.md slice + bible + troubleshooting + patterns)
 - Import: Contract ABI from `artifacts/contract/abi.json`
 - Import: Deployed contract address from `artifacts/deployment/receipt.json`
 - Import: Spec documents for expected behavior

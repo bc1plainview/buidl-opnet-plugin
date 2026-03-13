@@ -67,6 +67,7 @@ case "$AGENT_NAME" in
   opnet-adversarial-auditor) BIBLE_TAGS="SECURITY" ;;
   opnet-deployer)          BIBLE_TAGS="DEPLOYMENT" ;;
   opnet-e2e-tester)        BIBLE_TAGS="DEPLOYMENT" ;;
+  opnet-adversarial-tester) BIBLE_TAGS="DEPLOYMENT" ;;
   *)                       BIBLE_TAGS="" ;;
 esac
 
@@ -102,7 +103,7 @@ with open(bible_path) as f:
     content = f.read()
 
 # Find all section blocks
-pattern = r'<!-- BEGIN-SECTION-(\d+)\s+\[([^\]]+(?:\]\s*\[[^\]]+)*)\]\s*-->(.*?)<!-- END-SECTION-\1 -->'
+pattern = r'<!-- BEGIN-SECTION-(\d+)\s+(.*?)-->(.*?)<!-- END-SECTION-\1 -->'
 matches = re.findall(pattern, content, re.DOTALL)
 
 output_parts = []

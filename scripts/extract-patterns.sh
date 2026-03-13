@@ -38,7 +38,7 @@ TODAY=$(date '+%Y-%m-%d')
 PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
 CURRENT_VERSION="0.0.0"
 if [[ -f "$PLUGIN_JSON" ]]; then
-  CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null || echo "0.0.0")
+  CURRENT_VERSION=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['version'])" "$PLUGIN_JSON" 2>/dev/null || echo "0.0.0")
 fi
 CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
 
