@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.0.0] - 2026-03-13
+
+### Added
+- **Agent self-critique (Reflexion)**: All 4 builder agents (opnet-contract-dev, opnet-frontend-dev, opnet-backend-dev, loop-builder) now re-read their changes against `requirements.md` before declaring done. Each writes a `self-critique.md` artifact with spec compliance checklist, issues found and fixed, and remaining concerns. Any unmet criterion blocks completion until fixed.
+- **Incremental audit mode**: On cycle 2+, the auditor receives a `git diff` of changes since the last audit plus previous findings, instead of re-scanning the entire codebase. Focuses on the diff, blast radius, and verifying previous findings are resolved.
+- **Dry-run mode** (`--dry-run` flag): Challenge, Specify, and Explore phases run normally. Phase 4 prints the full execution plan (agents, knowledge, tasks, max_turns) without dispatching any agents, then stops.
+- **Agent execution tracing** (`scripts/trace-event.sh`): Appends structured JSONL events (dispatch, complete, route, finding, error, replan, checkpoint, state) to `artifacts/trace.jsonl`. New `/buidl-trace` command renders the trace as a formatted timeline.
+- **Dynamic re-planning** (`scripts/query-pattern.sh`): When an agent fails after retry, queries `learning/patterns.yaml` for known fix patterns matching the failure category. If found, presents a 5th option ("Apply known fix") alongside the existing 4 error-handling options.
+- **Trace command** (`commands/buidl-trace.md`): New `/buidl-trace` slash command that reads `trace.jsonl` and renders agent dispatch timeline, grouped by cycle.
+
+### Changed
+- **Orchestrator error handling** (`commands/buidl.md`): Agent failure flow now queries `query-pattern.sh` before presenting options. If a matching pattern exists, 5 options are shown (apply known fix, retry differently, skip, amend spec, cancel). Otherwise the existing 4 options are shown.
+- **Orchestrator Phase 4 Step 2** (`commands/buidl.md`): Each agent dispatch and completion now logs trace events via `trace-event.sh`. Phase transitions log checkpoint trace events. Review findings and routing decisions are traced.
+- **Auditor Step 2c** (`commands/buidl.md`): Cycle 2+ audits now pass `git diff` and previous findings to the auditor with incremental audit instructions.
+- **Auditor agent** (`agents/opnet-auditor.md`): New "Incremental Audit Mode" section documents the diff-based review process for cycle 2+.
+- **Plugin version**: 3.6.0 -> 4.0.0
+
+### Why
+Five features that close gaps in the agent intelligence loop. Self-critique catches spec drift before the reviewer does, saving entire review cycles. Incremental audits avoid re-scanning unchanged code, cutting audit time on fix cycles. Dry-run mode lets users preview the execution plan before committing to a full build. Execution tracing provides observability into agent dispatch ordering and timing. Dynamic re-planning applies lessons from past failures automatically instead of requiring manual intervention.
+
 ## [3.6.0] - 2026-03-13
 
 ### Added

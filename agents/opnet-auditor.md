@@ -55,9 +55,24 @@ Before auditing ANY code:
 - For every finding: verify it by reading the actual code. No false positives.
 - After the 27-pattern scan, proactively check: are there patterns NOT in the checklist that this specific codebase is vulnerable to?
 
+## Incremental Audit Mode (Cycle 2+)
+
+When you are dispatched on cycle 2 or later, the orchestrator provides:
+1. A `git diff` of changes since the last audit
+2. Previous audit findings from `artifacts/audit/findings.md`
+
+In incremental mode:
+- **Focus on the diff + blast radius.** Prioritize reviewing changed lines and any code they interact with.
+- **Verify previous findings resolved.** For each CRITICAL/HIGH finding from the previous audit, confirm the fix is correct and complete.
+- **Check for regressions.** Fixes sometimes introduce new issues -- scan the blast radius of each change.
+- **Still run the full 27-pattern scan** on changed files only (not the entire codebase).
+- **Output format is the same** as a full audit -- VERDICT, findings by severity, audit summary.
+
+If the diff is empty or trivial, state that and issue a PASS verdict with a note that no material changes were found.
+
 ## Process
 
-### Step 1: Real-Bug Pattern Scan (MANDATORY — 27 Checks)
+### Step 1: Real-Bug Pattern Scan (MANDATORY -- 27 Checks)
 
 Before any domain-specific audit, systematically scan ALL code against these 27 confirmed vulnerability patterns from real OPNet bugs. For each finding, cite the pattern ID and the original bug PR.
 

@@ -1,6 +1,6 @@
 ---
 description: "Full dev lifecycle: idea → challenge → spec → build → review → ship"
-argument-hint: '"raw idea" or path/to/spec/ [--max-cycles N] [--max-retries N] [--skip-challenge] [--max-tokens N]'
+argument-hint: '"raw idea" or path/to/spec/ [--max-cycles N] [--max-retries N] [--skip-challenge] [--max-tokens N] [--dry-run]'
 ---
 
 # The Loop
@@ -15,7 +15,7 @@ These rules apply throughout the entire pipeline:
 2. **Checkpointing**: After EVERY phase transition, write a checkpoint (see Checkpoint Protocol below).
 3. **Cost tracking**: After EVERY agent dispatch, log to cost-ledger.md and update `tokens_used` in state.
 4. **max_turns per agent type**: Builders=30, Reviewers=15, Explorers=15, Researchers=10, Auditors=20, Deployers=15, UI Testers=20. Always pass `max_turns` when dispatching agents.
-5. **Structured errors**: When an agent fails, retry once with error context. On second failure, present 4 numbered options (retry with different approach, skip this agent, amend spec, cancel loop). Never ask open-ended "what should I do?" questions.
+5. **Structured errors**: When an agent fails, retry once with error context. On second failure, query `scripts/query-pattern.sh` for a known fix. If found, present 5 options (apply known fix, retry differently, skip, amend spec, cancel). If not found, present 4 options (retry differently, skip, amend spec, cancel). Never ask open-ended "what should I do?" questions.
 6. **Context pressure**: If you detect context pressure (responses getting shorter, tool calls failing), immediately checkpoint and tell the user to run `/buidl-resume`.
 7. **Summaries across phases**: Never hold raw agent output across phase boundaries. Summarize, save to artifacts, then discard the raw output.
 
@@ -34,7 +34,8 @@ Parse optional flags:
 - `--skip-challenge` (skip Phase 1)
 - `--builder-model opus|sonnet` (default inherit)
 - `--reviewer-model opus|sonnet` (default inherit)
-- `--max-tokens N` (default unlimited — if set, track and enforce token budget)
+- `--max-tokens N` (default unlimited -- if set, track and enforce token budget)
+- `--dry-run` (run Challenge + Specify + Explore normally, then print the execution plan without dispatching agents)
 
 ### Auto-Detect Existing Session
 
@@ -111,6 +112,11 @@ Updated: <ISO timestamp>
 ```
 
 Also update state: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh current_phase=<phase> status=<status>`
+
+After each checkpoint, log a trace event:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> checkpoint orchestrator <phase> <cycle> "Phase transition to <phase>"
+```
 
 ## Cost Tracking Protocol
 
@@ -461,12 +467,40 @@ Write the execution plan to the state file.
 
 ### Step 2: Execute the Plan
 
-For each step in the execution plan, the orchestrator:
+**Dry-Run Check:** If `--dry-run` flag is set, do NOT dispatch any agents. Instead, print the execution plan:
 
-1. **Validates preconditions** — check that required artifacts exist from previous steps
-2. **Spawns the agent** — launch with Agent tool, providing spec, context, and artifact paths
-3. **Checks results** — validate output artifacts after agent completes
-4. **Routes failures** — if an agent fails, determine if it can retry or needs upstream fix
+```
+DRY RUN: Execution Plan
+========================
+The following agents WOULD be dispatched:
+
+Step 1: [agent-name]
+  Knowledge: [slice path]
+  Tasks: [task summary]
+  max_turns: [N]
+
+Step 2: [agent-name]
+  Knowledge: [slice path]
+  Tasks: [task summary]
+  max_turns: [N]
+  Parallel with: [other agent, if applicable]
+
+...
+
+Total agents: [N]
+Estimated max_turns: [sum]
+```
+
+Then stop. Do not proceed to agent dispatch or any subsequent phase.
+
+**Normal Execution:** For each step in the execution plan, the orchestrator:
+
+1. **Validates preconditions** -- check that required artifacts exist from previous steps
+2. **Traces the dispatch** -- `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> dispatch <agent-name> build <cycle> "Starting <agent-name>"`
+3. **Spawns the agent** -- launch with Agent tool, providing spec, context, and artifact paths
+4. **Traces completion** -- `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> complete <agent-name> build <cycle> "<outcome summary>"`
+5. **Checks results** -- validate output artifacts after agent completes
+6. **Routes failures** -- if an agent fails, determine if it can retry or needs upstream fix
 
 #### Agent Dispatch Template
 
@@ -524,12 +558,24 @@ Write your artifacts to: .claude/loop/sessions/[name]/artifacts/[domain]/
 
 **If an agent fails:**
 1. Retry once, including the error output in the retry prompt.
-2. If retry also fails, present AskUserQuestion with exactly 4 numbered options:
+2. Log a trace event: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> error <agent-name> build <cycle> "Agent failed after retry"`
+3. If retry also fails, check for a known fix pattern:
+   ```bash
+   PATTERN_MATCH=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/query-pattern.sh "<failure-category>" "<keywords>" 2>/dev/null || true)
+   ```
+4. If a pattern match is found (`PATTERN_MATCH` is non-empty), present AskUserQuestion with 5 numbered options:
+   - "Apply known fix: [description from pattern match]"
    - "Retry with a different approach"
    - "Skip this agent and continue"
    - "Amend the spec to work around this"
    - "Cancel the loop"
-3. Never ask open-ended questions like "what should I do?"
+   If the user selects "Apply known fix", apply the fix from the pattern, log a replan trace event, and retry the agent.
+5. If no pattern match is found, present AskUserQuestion with 4 numbered options:
+   - "Retry with a different approach"
+   - "Skip this agent and continue"
+   - "Amend the spec to work around this"
+   - "Cancel the loop"
+6. Never ask open-ended questions like "what should I do?"
 
 #### Step 2a: Contract Development (if components.contract = true)
 
@@ -627,10 +673,19 @@ This step catches ABI mismatches, wrong method names, parameter type errors, con
 
 #### Step 2c: Security Audit
 
+**Incremental Audit (cycle >= 2):** If this is cycle 2 or later, construct the auditor prompt with incremental context:
+1. Run `git diff` in the worktree to capture changes since the last audit.
+2. Read the previous audit findings from `artifacts/audit/findings.md`.
+3. Include both in the auditor prompt with the instruction: "Focus on the diff + blast radius. Verify previous findings resolved."
+4. Log a trace event: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> dispatch opnet-auditor build <cycle> "Incremental audit: diff-based review"`
+
+**Full Audit (cycle 1):** Standard full-codebase audit.
+
 Launch `opnet-auditor` agent:
 - Knowledge: `knowledge/slices/security-audit.md`
-- Scope: ALL source files across all components
-- Import: Cross-layer validation report from `artifacts/validation/cross-layer-report.md` (if available — pass WARNING findings as additional context)
+- Scope: ALL source files across all components (cycle 1) or diff + blast radius (cycle 2+)
+- Import: Cross-layer validation report from `artifacts/validation/cross-layer-report.md` (if available -- pass WARNING findings as additional context)
+- Import (cycle 2+): `git diff` output and previous `artifacts/audit/findings.md`
 - Output: `artifacts/audit/findings.md`
 
 **Decision after audit:**
@@ -808,11 +863,13 @@ Save the review output to `.claude/loop/sessions/<name>/reviews/cycle-<N>.md`.
 **If VERDICT is FAIL:**
 - Check if cycle < max_cycles.
 - If yes: the Stop hook will catch the exit and re-inject the builder prompt with findings. The loop continues automatically.
+  - Log a trace event for each finding: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> finding loop-reviewer review <cycle> "<finding summary>" --category <category>`
   - **Score-based routing (v3.6):** For each CRITICAL or MAJOR finding, use `route-finding.sh` to determine the best agent:
     ```bash
     bash ${CLAUDE_PLUGIN_ROOT}/scripts/route-finding.sh "<finding description>" "<candidate-agents>"
     ```
     The script returns `agent_name|confidence|reasoning`. If confidence >= 0.6, route to that agent. If confidence < 0.6 (keyword fallback), use the traditional category-based routing as a safety net.
+  - Log a trace event for each routing decision: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/trace-event.sh <session-dir> route orchestrator review <cycle> "Routed finding to <agent> (confidence: <N>)"`
   - For OPNet projects: candidate agents are `opnet-contract-dev,opnet-frontend-dev,opnet-backend-dev`.
   - For generic projects: candidate agents are derived from the agents that were dispatched in this session.
   - After routing, write a categorized findings file to `artifacts/findings-categorized.md` for use by `update-scores.sh --findings` during wrap-up. Format per finding: `agent: <name> | category: <category> | outcome: pending`

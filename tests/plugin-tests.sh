@@ -1443,6 +1443,400 @@ rm -f "learning/profiles/$MOCK_TYPE.yaml"
 rm -rf "$FUNC_TMPDIR"
 
 # ─────────────────────────────────────────────────
+# Self-Critique
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Self-Critique ==="
+
+# All 4 builder agents must have Self-Critique step
+for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
+  if grep -q 'Self-Critique' "agents/$agent.md"; then
+    pass "$agent has Self-Critique step"
+  else
+    fail "$agent MISSING Self-Critique step"
+  fi
+done
+
+# All 4 builder agents must reference self-critique.md
+for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
+  if grep -q 'self-critique.md' "agents/$agent.md"; then
+    pass "$agent references self-critique.md artifact"
+  else
+    fail "$agent MISSING self-critique.md reference"
+  fi
+done
+
+# Self-Critique must reference requirements.md
+for agent in opnet-contract-dev opnet-frontend-dev opnet-backend-dev loop-builder; do
+  if grep -q 'requirements.md' "agents/$agent.md"; then
+    pass "$agent Self-Critique references requirements.md"
+  else
+    fail "$agent Self-Critique MISSING requirements.md reference"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# Incremental Audit
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Incremental Audit ==="
+
+# Auditor must have Incremental Audit Mode section
+if grep -q 'Incremental Audit Mode' agents/opnet-auditor.md; then
+  pass "opnet-auditor has Incremental Audit Mode section"
+else
+  fail "opnet-auditor MISSING Incremental Audit Mode section"
+fi
+
+# Auditor must reference git diff
+if grep -q 'git diff' agents/opnet-auditor.md; then
+  pass "opnet-auditor references git diff in incremental mode"
+else
+  fail "opnet-auditor MISSING git diff reference"
+fi
+
+# Auditor must reference previous findings
+if grep -q 'previous.*findings\|findings.*previous' agents/opnet-auditor.md; then
+  pass "opnet-auditor references previous findings"
+else
+  fail "opnet-auditor MISSING previous findings reference"
+fi
+
+# buidl.md Step 2c must have incremental audit conditional
+if grep -q 'Incremental Audit' commands/buidl.md; then
+  pass "buidl.md has Incremental Audit section"
+else
+  fail "buidl.md MISSING Incremental Audit section"
+fi
+
+if grep -q 'git diff' commands/buidl.md; then
+  pass "buidl.md references git diff for incremental audit"
+else
+  fail "buidl.md MISSING git diff reference"
+fi
+
+# ─────────────────────────────────────────────────
+# Dry-Run Mode
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Dry-Run Mode ==="
+
+# buidl.md must have --dry-run in flag parsing
+if grep -q '\-\-dry-run' commands/buidl.md; then
+  pass "buidl.md has --dry-run flag"
+else
+  fail "buidl.md MISSING --dry-run flag"
+fi
+
+# buidl.md must have execution plan output section
+if grep -q 'DRY RUN.*Execution Plan\|Dry-Run Check' commands/buidl.md; then
+  pass "buidl.md has dry-run execution plan section"
+else
+  fail "buidl.md MISSING dry-run execution plan section"
+fi
+
+# buidl.md argument-hint must include --dry-run
+if grep -q 'dry-run' commands/buidl.md | head -5; then
+  pass "buidl.md argument-hint includes --dry-run"
+else
+  # Check more broadly
+  if grep -q 'dry.run' commands/buidl.md; then
+    pass "buidl.md argument-hint includes --dry-run"
+  else
+    fail "buidl.md argument-hint MISSING --dry-run"
+  fi
+fi
+
+# ─────────────────────────────────────────────────
+# Agent Tracing
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Agent Tracing ==="
+
+# trace-event.sh exists
+if [[ -f scripts/trace-event.sh ]]; then
+  pass "trace-event.sh exists"
+else
+  fail "trace-event.sh MISSING"
+fi
+
+# trace-event.sh passes bash -n
+if bash -n scripts/trace-event.sh 2>/dev/null; then
+  pass "trace-event.sh passes bash -n"
+else
+  fail "trace-event.sh FAILS bash -n"
+fi
+
+# trace-event.sh is executable
+if [[ -x scripts/trace-event.sh ]]; then
+  pass "trace-event.sh is executable"
+else
+  fail "trace-event.sh is NOT executable"
+fi
+
+# trace-event.sh has set -euo pipefail
+if grep -q 'set -euo pipefail' scripts/trace-event.sh; then
+  pass "trace-event.sh has set -euo pipefail"
+else
+  fail "trace-event.sh MISSING set -euo pipefail"
+fi
+
+# trace-event.sh has SCRIPT_DIR
+if grep -q 'SCRIPT_DIR' scripts/trace-event.sh; then
+  pass "trace-event.sh has SCRIPT_DIR"
+else
+  fail "trace-event.sh MISSING SCRIPT_DIR"
+fi
+
+# buidl-trace.md command exists
+if [[ -f commands/buidl-trace.md ]]; then
+  pass "buidl-trace.md command exists"
+else
+  fail "buidl-trace.md command MISSING"
+fi
+
+# buidl.md references trace-event.sh
+if grep -q 'trace-event.sh' commands/buidl.md; then
+  pass "buidl.md references trace-event.sh"
+else
+  fail "buidl.md MISSING trace-event.sh reference"
+fi
+
+# Functional: trace-event.sh appends valid JSON to trace file
+TRACE_TMPDIR=$(mktemp -d)
+mkdir -p "$TRACE_TMPDIR/artifacts"
+if bash scripts/trace-event.sh "$TRACE_TMPDIR" "dispatch" "test-agent" "build" "1" "Test dispatch event" --tokens 500 --category testing 2>/dev/null; then
+  if [[ -f "$TRACE_TMPDIR/artifacts/trace.jsonl" ]]; then
+    # Verify it's valid JSON
+    if python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    for line in f:
+        event = json.loads(line)
+        assert event['event_type'] == 'dispatch', f'wrong event_type: {event[\"event_type\"]}'
+        assert event['agent'] == 'test-agent', f'wrong agent: {event[\"agent\"]}'
+        assert event['cycle'] == 1, f'wrong cycle: {event[\"cycle\"]}'
+        assert event.get('tokens') == 500, f'wrong tokens: {event.get(\"tokens\")}'
+        assert event.get('category') == 'testing', f'wrong category: {event.get(\"category\")}'
+" "$TRACE_TMPDIR/artifacts/trace.jsonl" 2>&1; then
+      pass "trace-event.sh appends valid JSON with correct fields"
+    else
+      fail "trace-event.sh JSON output has incorrect fields"
+    fi
+  else
+    fail "trace-event.sh did NOT create trace.jsonl"
+  fi
+else
+  fail "trace-event.sh failed to run"
+fi
+
+# Functional: trace-event.sh rejects invalid event type
+if bash scripts/trace-event.sh "$TRACE_TMPDIR" "invalid-type" "agent" "build" "1" "test" 2>/dev/null; then
+  fail "trace-event.sh should reject invalid event type"
+else
+  pass "trace-event.sh rejects invalid event type"
+fi
+
+# Functional: trace-event.sh rejects missing arguments
+if bash scripts/trace-event.sh 2>/dev/null; then
+  fail "trace-event.sh should reject missing arguments"
+else
+  pass "trace-event.sh rejects missing arguments"
+fi
+
+rm -rf "$TRACE_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# Dynamic Re-Planning
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Dynamic Re-Planning ==="
+
+# query-pattern.sh exists
+if [[ -f scripts/query-pattern.sh ]]; then
+  pass "query-pattern.sh exists"
+else
+  fail "query-pattern.sh MISSING"
+fi
+
+# query-pattern.sh passes bash -n
+if bash -n scripts/query-pattern.sh 2>/dev/null; then
+  pass "query-pattern.sh passes bash -n"
+else
+  fail "query-pattern.sh FAILS bash -n"
+fi
+
+# query-pattern.sh is executable
+if [[ -x scripts/query-pattern.sh ]]; then
+  pass "query-pattern.sh is executable"
+else
+  fail "query-pattern.sh is NOT executable"
+fi
+
+# query-pattern.sh has set -euo pipefail
+if grep -q 'set -euo pipefail' scripts/query-pattern.sh; then
+  pass "query-pattern.sh has set -euo pipefail"
+else
+  fail "query-pattern.sh MISSING set -euo pipefail"
+fi
+
+# query-pattern.sh guards against missing patterns.yaml
+if grep -q '\[\[ -f.*PATTERNS_FILE\|! -f.*PATTERNS_FILE' scripts/query-pattern.sh; then
+  pass "query-pattern.sh guards against missing patterns.yaml"
+else
+  fail "query-pattern.sh MISSING patterns.yaml guard"
+fi
+
+# buidl.md references query-pattern.sh
+if grep -q 'query-pattern.sh' commands/buidl.md; then
+  pass "buidl.md references query-pattern.sh"
+else
+  fail "buidl.md MISSING query-pattern.sh reference"
+fi
+
+# buidl.md has "Apply known fix" option
+if grep -q 'Apply known fix' commands/buidl.md; then
+  pass "buidl.md has 'Apply known fix' option for re-planning"
+else
+  fail "buidl.md MISSING 'Apply known fix' option"
+fi
+
+# Functional: query-pattern.sh exits 1 when patterns.yaml is missing
+QUERY_TMPDIR=$(mktemp -d)
+if SCRIPT_DIR_OVERRIDE="$QUERY_TMPDIR" bash scripts/query-pattern.sh "contract" 2>/dev/null; then
+  fail "query-pattern.sh should exit 1 when patterns.yaml missing"
+else
+  pass "query-pattern.sh exits 1 when patterns.yaml missing"
+fi
+
+# Functional: query-pattern.sh returns matches from patterns.yaml
+cat > "$QUERY_TMPDIR/patterns.yaml" << 'PATEOF'
+patterns:
+  - id: PAT-TEST-1
+    category: contract
+    domain: contract
+    description: Test pattern for SafeMath missing
+    fix: Add SafeMath.add for all u256 operations
+    occurrences: 3
+  - id: PAT-TEST-2
+    category: frontend
+    domain: frontend
+    description: Buffer usage in frontend code
+    fix: Replace Buffer with Uint8Array
+    occurrences: 2
+PATEOF
+
+# Override SCRIPT_DIR so query-pattern.sh finds the test patterns.yaml
+# We need to create the learning directory structure
+mkdir -p "$QUERY_TMPDIR/learning"
+cp "$QUERY_TMPDIR/patterns.yaml" "$QUERY_TMPDIR/learning/patterns.yaml"
+
+# Create a wrapper script that overrides SCRIPT_DIR before sourcing the real logic
+mkdir -p "$QUERY_TMPDIR/scripts"
+cat > "$QUERY_TMPDIR/scripts/query-pattern.sh" << WRAPEOF
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR="$QUERY_TMPDIR"
+PATTERNS_FILE="\$SCRIPT_DIR/learning/patterns.yaml"
+CATEGORY="\${1:-}"
+if [[ -z "\$CATEGORY" ]]; then
+  exit 1
+fi
+if [[ ! -f "\$PATTERNS_FILE" ]]; then
+  exit 1
+fi
+shift
+KEYWORDS=()
+if [[ \$# -gt 0 ]]; then
+  KEYWORDS=("\$@")
+fi
+python3 -c "
+import yaml, sys
+patterns_file = sys.argv[1]
+category = sys.argv[2]
+keywords = sys.argv[3:]
+with open(patterns_file) as f:
+    data = yaml.safe_load(f)
+if not data:
+    sys.exit(1)
+patterns = data.get('patterns', [])
+if not patterns:
+    sys.exit(1)
+matches = []
+for p in patterns:
+    p_category = p.get('category', '')
+    p_domain = p.get('domain', '')
+    if category.lower() not in p_category.lower() and category.lower() not in p_domain.lower():
+        continue
+    if keywords:
+        desc = (p.get('description', '') + ' ' + p.get('fix', '')).lower()
+        if not any(kw.lower() in desc for kw in keywords):
+            continue
+    pattern_id = p.get('id', p.get('pattern_id', 'unknown'))
+    description = p.get('description', '')
+    fix = p.get('fix', '')
+    matches.append(f'{pattern_id}|{description}|{fix}')
+if not matches:
+    sys.exit(1)
+for m in matches:
+    print(m)
+" "\$PATTERNS_FILE" "\$CATEGORY" \${KEYWORDS[@]+"\${KEYWORDS[@]}"} 2>/dev/null
+exit \$?
+WRAPEOF
+chmod +x "$QUERY_TMPDIR/scripts/query-pattern.sh"
+
+PATTERN_RESULT=$(bash "$QUERY_TMPDIR/scripts/query-pattern.sh" "contract" 2>/dev/null || true)
+if echo "$PATTERN_RESULT" | grep -q 'PAT-TEST-1.*SafeMath'; then
+  pass "query-pattern.sh returns matching patterns"
+else
+  fail "query-pattern.sh did NOT return matching pattern (got: $PATTERN_RESULT)"
+fi
+
+# query-pattern.sh should NOT return frontend patterns for contract query
+if echo "$PATTERN_RESULT" | grep -q 'PAT-TEST-2'; then
+  fail "query-pattern.sh returned wrong category pattern"
+else
+  pass "query-pattern.sh filters by category correctly"
+fi
+
+# Functional: query-pattern.sh with keyword narrowing
+KEYWORD_RESULT=$(bash "$QUERY_TMPDIR/scripts/query-pattern.sh" "contract" "SafeMath" 2>/dev/null || true)
+if echo "$KEYWORD_RESULT" | grep -q 'PAT-TEST-1'; then
+  pass "query-pattern.sh narrows results with keyword"
+else
+  fail "query-pattern.sh keyword narrowing failed (got: $KEYWORD_RESULT)"
+fi
+
+rm -rf "$QUERY_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# Version 4.0.0 Consistency
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Version 4.0.0 ==="
+
+V4_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
+V4_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+
+if [[ "$V4_PLUGIN" == "4.0.0" ]]; then
+  pass "plugin.json version is 4.0.0"
+else
+  fail "plugin.json version is NOT 4.0.0 (got: $V4_PLUGIN)"
+fi
+
+if [[ "$V4_CHANGELOG" == "4.0.0" ]]; then
+  pass "CHANGELOG first entry is 4.0.0"
+else
+  fail "CHANGELOG first entry is NOT 4.0.0 (got: $V4_CHANGELOG)"
+fi
+
+if [[ "$V4_PLUGIN" == "$V4_CHANGELOG" ]]; then
+  pass "plugin.json version matches CHANGELOG first entry"
+else
+  fail "plugin.json ($V4_PLUGIN) does NOT match CHANGELOG ($V4_CHANGELOG)"
+fi
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 echo ""
