@@ -71,29 +71,37 @@ case "$AGENT_NAME" in
   *)                       BIBLE_TAGS="" ;;
 esac
 
-# Collect output sections in order of relevance (most relevant first)
+# Use temp files instead of large bash variables to avoid cross-platform
+# pipe issues (SIGPIPE under pipefail, bash version differences)
+_TMPDIR=$(mktemp -d)
+trap 'rm -rf "$_TMPDIR"' EXIT
+
+# Collect section file paths in order of relevance (most relevant first)
 # Section 1: Agent-specific slice (highest relevance)
 # Section 2: Troubleshooting guide
 # Section 3: Bible sections matching role
 # Section 4: Learned patterns
+SECTION_FILES=()
+SECTION_NAMES=()
 
-SLICE_CONTENT=""
+# Section 1: Agent-specific slice
 if [[ -n "$SLICE_FILE" && -f "$SLICE_FILE" ]]; then
-  SLICE_CONTENT=$(cat "$SLICE_FILE")
+  SECTION_FILES+=("$SLICE_FILE")
+  SECTION_NAMES+=("agent-slice")
 fi
 
-TROUBLESHOOTING_CONTENT=""
+# Section 2: Troubleshooting
 TROUBLESHOOTING_FILE="$SCRIPT_DIR/knowledge/opnet-troubleshooting.md"
 if [[ -f "$TROUBLESHOOTING_FILE" ]]; then
-  TROUBLESHOOTING_CONTENT=$(cat "$TROUBLESHOOTING_FILE")
+  SECTION_FILES+=("$TROUBLESHOOTING_FILE")
+  SECTION_NAMES+=("troubleshooting")
 fi
 
+# Section 3: Bible sections (extracted to temp file)
 BIBLE_FILE="$SCRIPT_DIR/knowledge/opnet-bible.md"
-BIBLE_CONTENT=""
+_BIBLE_TMP="$_TMPDIR/bible.md"
 if [[ -n "$BIBLE_TAGS" && -f "$BIBLE_FILE" ]]; then
-  # Extract matching sections from the bible based on tags
-  # Each section is delimited by BEGIN-SECTION-N and END-SECTION-N comments
-  BIBLE_CONTENT=$(python3 -c "
+  python3 -c "
 import sys, re
 
 bible_path = sys.argv[1]
@@ -115,15 +123,23 @@ for section_num, tag_str, section_content in matches:
         output_parts.append(section_content.strip())
 
 print('\n\n'.join(output_parts))
-" "$BIBLE_FILE" "$BIBLE_TAGS" 2>/dev/null || echo "")
+" "$BIBLE_FILE" "$BIBLE_TAGS" > "$_BIBLE_TMP" 2>/dev/null || true
+  if [[ -s "$_BIBLE_TMP" ]]; then
+    SECTION_FILES+=("$_BIBLE_TMP")
+    SECTION_NAMES+=("bible")
+  fi
 fi
 
-# Extract non-stale learned patterns
+# Section 4: Learned patterns (extracted to temp file)
 PATTERNS_FILE="$SCRIPT_DIR/learning/patterns.yaml"
-LEARNED_CONTENT=""
+_LEARNED_TMP="$_TMPDIR/learned.md"
 if [[ -f "$PATTERNS_FILE" ]]; then
-  LEARNED_CONTENT=$(python3 -c "
-import yaml, sys
+  python3 -c "
+try:
+    import yaml
+except ImportError:
+    import sys; sys.exit(0)
+import sys
 
 patterns_file = sys.argv[1]
 project_type = sys.argv[2]
@@ -159,76 +175,60 @@ for p in patterns:
 
 if count > 0:
     print('\n'.join(output))
-" "$PATTERNS_FILE" "$PROJECT_TYPE" 2>/dev/null || echo "")
-fi
-
-# Assemble output in relevance order
-# Priority: 1=slice, 2=troubleshooting, 3=bible, 4=learned
-SECTIONS=()
-SECTION_NAMES=()
-
-if [[ -n "$SLICE_CONTENT" ]]; then
-  SECTIONS+=("$SLICE_CONTENT")
-  SECTION_NAMES+=("agent-slice")
-fi
-
-if [[ -n "$TROUBLESHOOTING_CONTENT" ]]; then
-  SECTIONS+=("$TROUBLESHOOTING_CONTENT")
-  SECTION_NAMES+=("troubleshooting")
-fi
-
-if [[ -n "$BIBLE_CONTENT" ]]; then
-  SECTIONS+=("$BIBLE_CONTENT")
-  SECTION_NAMES+=("bible")
-fi
-
-if [[ -n "$LEARNED_CONTENT" ]]; then
-  SECTIONS+=("$LEARNED_CONTENT")
-  SECTION_NAMES+=("learned-patterns")
-fi
-
-# Combine all sections
-COMBINED=""
-for section in "${SECTIONS[@]}"; do
-  if [[ -n "$COMBINED" ]]; then
-    COMBINED="$COMBINED"$'\n\n'
+" "$PATTERNS_FILE" "$PROJECT_TYPE" > "$_LEARNED_TMP" 2>/dev/null || true
+  if [[ -s "$_LEARNED_TMP" ]]; then
+    SECTION_FILES+=("$_LEARNED_TMP")
+    SECTION_NAMES+=("learned-patterns")
   fi
-  COMBINED="$COMBINED$section"
+fi
+
+# If no sections were collected, exit cleanly
+if [[ ${#SECTION_FILES[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+# Combine all sections into a single output file
+_OUTPUT="$_TMPDIR/output.md"
+_FIRST=true
+for _f in "${SECTION_FILES[@]}"; do
+  if [[ "$_FIRST" != "true" ]]; then
+    printf '\n\n' >> "$_OUTPUT"
+  fi
+  cat "$_f" >> "$_OUTPUT"
+  _FIRST=false
 done
 
 # Count lines and truncate if needed (remove least-relevant sections first)
-# Use printf to avoid echo adding trailing newline, then pipe to wc -l
-LINE_COUNT=$(printf '%s\n' "$COMBINED" | wc -l | tr -d ' ')
+LINE_COUNT=$(wc -l < "$_OUTPUT" | tr -d ' ')
 
 if [[ "$LINE_COUNT" -gt "$MAX_LINES" ]]; then
-  # Truncate from the end (least relevant sections first: learned, bible, troubleshooting)
-  # Rebuild from highest relevance until we hit the cap
-  COMBINED=""
+  _TRUNCATED="$_TMPDIR/truncated.md"
   REMAINING=$MAX_LINES
 
-  for i in "${!SECTIONS[@]}"; do
-    SECTION_LINES=$(printf '%s\n' "${SECTIONS[$i]}" | wc -l | tr -d ' ')
+  for i in "${!SECTION_FILES[@]}"; do
     if [[ "$REMAINING" -le 0 ]]; then
       break
     fi
+    SECTION_LINES=$(wc -l < "${SECTION_FILES[$i]}" | tr -d ' ')
+
+    # Add separator between sections (not before the first)
+    if [[ "$i" -gt 0 ]]; then
+      printf '\n\n' >> "$_TRUNCATED"
+      REMAINING=$((REMAINING - 2))
+    fi
+
     if [[ "$SECTION_LINES" -le "$REMAINING" ]]; then
-      if [[ -n "$COMBINED" ]]; then
-        COMBINED="$COMBINED"$'\n\n'
-        REMAINING=$((REMAINING - 2))
-      fi
-      COMBINED="$COMBINED${SECTIONS[$i]}"
+      cat "${SECTION_FILES[$i]}" >> "$_TRUNCATED"
       REMAINING=$((REMAINING - SECTION_LINES))
     else
       # Partial inclusion of this section
-      if [[ -n "$COMBINED" ]]; then
-        COMBINED="$COMBINED"$'\n\n'
-        REMAINING=$((REMAINING - 2))
-      fi
-      PARTIAL=$(printf '%s\n' "${SECTIONS[$i]}" | head -n "$((REMAINING - 1))")
-      COMBINED="$COMBINED$PARTIAL"$'\n'"[TRUNCATED: ${SECTION_NAMES[$i]} section exceeded $MAX_LINES line budget]"
+      head -n "$((REMAINING - 1))" "${SECTION_FILES[$i]}" >> "$_TRUNCATED"
+      printf '[TRUNCATED: %s section exceeded %d line budget]\n' "${SECTION_NAMES[$i]}" "$MAX_LINES" >> "$_TRUNCATED"
       REMAINING=0
     fi
   done
-fi
 
-printf '%s\n' "$COMBINED"
+  cat "$_TRUNCATED"
+else
+  cat "$_OUTPUT"
+fi

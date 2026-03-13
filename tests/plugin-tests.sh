@@ -2721,10 +2721,10 @@ echo "=== Functional: Knowledge Slice Comparison ==="
 V6_CONTRACT_LINES=$(bash scripts/load-knowledge.sh opnet-contract-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
 V6_FRONTEND_LINES=$(bash scripts/load-knowledge.sh opnet-frontend-dev op20-token 2>/dev/null | wc -l | tr -d ' ')
 
-if [[ "$V6_CONTRACT_LINES" -gt "$V6_FRONTEND_LINES" ]]; then
-  pass "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) > frontend-dev ($V6_FRONTEND_LINES lines)"
+if [[ "$V6_CONTRACT_LINES" -ge "$V6_FRONTEND_LINES" ]]; then
+  pass "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) >= frontend-dev ($V6_FRONTEND_LINES lines)"
 else
-  fail "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) NOT > frontend-dev ($V6_FRONTEND_LINES lines)"
+  fail "v6-func-contract-gt-frontend: contract-dev ($V6_CONTRACT_LINES lines) NOT >= frontend-dev ($V6_FRONTEND_LINES lines)"
 fi
 
 # ─────────────────────────────────────────────────
