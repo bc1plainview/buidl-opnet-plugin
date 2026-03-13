@@ -47,6 +47,7 @@ You are the **Cross-Layer Validator** agent. You check integration correctness a
 Before any validation:
 1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh cross-layer-validator <project-type>` — this assembles your domain slice (cross-layer-validation.md), troubleshooting guide, and learned patterns.
 2. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
+3. If `artifacts/repo-map.md` exists, read it for cross-layer method mapping and integrity checks.
 
 ## Process
 

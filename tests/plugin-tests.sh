@@ -1810,30 +1810,30 @@ fi
 rm -rf "$QUERY_TMPDIR"
 
 # ─────────────────────────────────────────────────
-# Version 6.0.0 Consistency (TEST-13)
+# Version 7.0.0 Consistency
 # ─────────────────────────────────────────────────
 echo ""
-echo "=== Version 6.0.0 ==="
+echo "=== Version 7.0.0 ==="
 
-V6_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
-V6_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+V7_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
+V7_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 
-if [[ "$V6_PLUGIN" == "6.0.0" ]]; then
-  pass "v6-plugin-json-version: plugin.json version is 6.0.0"
+if [[ "$V7_PLUGIN" == "7.0.0" ]]; then
+  pass "v7-plugin-json-version: plugin.json version is 7.0.0"
 else
-  fail "v6-plugin-json-version: plugin.json version is NOT 6.0.0 (got: $V6_PLUGIN)"
+  fail "v7-plugin-json-version: plugin.json version is NOT 7.0.0 (got: $V7_PLUGIN)"
 fi
 
-if [[ "$V6_CHANGELOG" == "6.0.0" ]]; then
-  pass "v6-changelog-first-entry: CHANGELOG first entry is 6.0.0"
+if [[ "$V7_CHANGELOG" == "7.0.0" ]]; then
+  pass "v7-changelog-first-entry: CHANGELOG first entry is 7.0.0"
 else
-  fail "v6-changelog-first-entry: CHANGELOG first entry is NOT 6.0.0 (got: $V6_CHANGELOG)"
+  fail "v7-changelog-first-entry: CHANGELOG first entry is NOT 7.0.0 (got: $V7_CHANGELOG)"
 fi
 
-if [[ "$V6_PLUGIN" == "$V6_CHANGELOG" ]]; then
-  pass "v6-version-consistency: plugin.json version matches CHANGELOG first entry"
+if [[ "$V7_PLUGIN" == "$V7_CHANGELOG" ]]; then
+  pass "v7-version-consistency: plugin.json version matches CHANGELOG first entry"
 else
-  fail "v6-version-consistency: plugin.json ($V6_PLUGIN) does NOT match CHANGELOG ($V6_CHANGELOG)"
+  fail "v7-version-consistency: plugin.json ($V7_PLUGIN) does NOT match CHANGELOG ($V7_CHANGELOG)"
 fi
 
 # ─────────────────────────────────────────────────
@@ -2844,6 +2844,800 @@ fi
 # Restore real patterns.yaml
 cp "$STALE_PATTERNS_BACKUP" learning/patterns.yaml
 rm -rf "$STALE_TMPDIR"
+
+# ─────────────────────────────────────────────────
+# v7 TEST-1: Mutation Testing Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Mutation Testing Script ==="
+
+if [[ -f scripts/mutate-contract.sh ]]; then
+  pass "v7-mutation-script-exists: scripts/mutate-contract.sh exists"
+else
+  fail "v7-mutation-script-exists: scripts/mutate-contract.sh NOT found"
+fi
+
+if [[ -x scripts/mutate-contract.sh ]]; then
+  pass "v7-mutation-script-executable: scripts/mutate-contract.sh is executable"
+else
+  fail "v7-mutation-script-executable: scripts/mutate-contract.sh is NOT executable"
+fi
+
+check "v7-mutation-script-syntax: mutate-contract.sh passes bash -n" bash -n scripts/mutate-contract.sh
+
+if head -1 scripts/mutate-contract.sh | grep -q '#!/bin/bash'; then
+  pass "v7-mutation-script-shebang: mutate-contract.sh has bash shebang"
+else
+  fail "v7-mutation-script-shebang: mutate-contract.sh missing bash shebang"
+fi
+
+if grep -q 'set -euo pipefail' scripts/mutate-contract.sh; then
+  pass "v7-mutation-script-pipefail: mutate-contract.sh has set -euo pipefail"
+else
+  fail "v7-mutation-script-pipefail: mutate-contract.sh missing set -euo pipefail"
+fi
+
+if grep -q 'SCRIPT_DIR=' scripts/mutate-contract.sh; then
+  pass "v7-mutation-script-dir: mutate-contract.sh has SCRIPT_DIR"
+else
+  fail "v7-mutation-script-dir: mutate-contract.sh missing SCRIPT_DIR"
+fi
+
+# Verify 20 mutation operators exist
+OPERATOR_COUNT=$(grep -c 'arith-\|compare-\|bool-\|logic-\|negate-\|remove-\|zero-\|one-\|swap-' scripts/mutate-contract.sh || true)
+if [[ "$OPERATOR_COUNT" -ge 20 ]]; then
+  pass "v7-mutation-20-operators: mutate-contract.sh has >= 20 mutation operators ($OPERATOR_COUNT found)"
+else
+  fail "v7-mutation-20-operators: mutate-contract.sh has < 20 mutation operators ($OPERATOR_COUNT found)"
+fi
+
+if grep -q 'mutation-score.json' scripts/mutate-contract.sh; then
+  pass "v7-mutation-output-file: mutate-contract.sh outputs mutation-score.json"
+else
+  fail "v7-mutation-output-file: mutate-contract.sh does NOT output mutation-score.json"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-2: Mutation Script Functional Test
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Mutation Script Functional ==="
+
+MUTATION_TMPDIR=$(mktemp -d)
+mkdir -p "$MUTATION_TMPDIR/src"
+mkdir -p "$MUTATION_TMPDIR/tests"
+echo 'export class Token { }' > "$MUTATION_TMPDIR/src/contract.ts"
+
+# Run with empty test dir — should produce valid JSON with score 0
+MUTATION_OUT=$(bash scripts/mutate-contract.sh "$MUTATION_TMPDIR/src/contract.ts" "$MUTATION_TMPDIR/tests" 2>&1 || true)
+
+if [[ -f artifacts/testing/mutation-score.json ]]; then
+  pass "v7-mutation-func-creates-json: mutate-contract.sh creates mutation-score.json"
+
+  # Check JSON structure using python3
+  MUTATION_SCORE=$(python3 -c "import json; d=json.load(open('artifacts/testing/mutation-score.json')); print(d.get('mutation_score', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+  MUTATION_VERDICT=$(python3 -c "import json; d=json.load(open('artifacts/testing/mutation-score.json')); print(d.get('verdict', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+  MUTATION_THRESHOLD=$(python3 -c "import json; d=json.load(open('artifacts/testing/mutation-score.json')); print(type(d.get('threshold')).__name__)" 2>/dev/null || echo "PARSE_ERROR")
+
+  if [[ "$MUTATION_SCORE" == "0" || "$MUTATION_SCORE" == "0.0" ]]; then
+    pass "v7-mutation-func-score-zero: mutation_score is 0 for empty test dir"
+  else
+    fail "v7-mutation-func-score-zero: mutation_score is NOT 0 (got: $MUTATION_SCORE)"
+  fi
+
+  if [[ "$MUTATION_VERDICT" == "FAIL" ]]; then
+    pass "v7-mutation-func-verdict-fail: verdict is FAIL for score 0"
+  else
+    fail "v7-mutation-func-verdict-fail: verdict is NOT FAIL (got: $MUTATION_VERDICT)"
+  fi
+
+  if [[ "$MUTATION_THRESHOLD" == "float" ]]; then
+    pass "v7-mutation-func-threshold-type: threshold is a number (float), not string"
+  else
+    fail "v7-mutation-func-threshold-type: threshold is NOT a number (got type: $MUTATION_THRESHOLD)"
+  fi
+else
+  fail "v7-mutation-func-creates-json: mutation-score.json NOT created"
+  fail "v7-mutation-func-score-zero: (skipped — no JSON)"
+  fail "v7-mutation-func-verdict-fail: (skipped — no JSON)"
+  fail "v7-mutation-func-threshold-type: (skipped — no JSON)"
+fi
+
+rm -rf "$MUTATION_TMPDIR"
+rm -f artifacts/testing/mutation-score.json
+
+# ─────────────────────────────────────────────────
+# v7 TEST-3: Localize Failure Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Localize Failure Script ==="
+
+if [[ -f scripts/localize-failure.sh ]]; then
+  pass "v7-localize-script-exists: scripts/localize-failure.sh exists"
+else
+  fail "v7-localize-script-exists: scripts/localize-failure.sh NOT found"
+fi
+
+if [[ -x scripts/localize-failure.sh ]]; then
+  pass "v7-localize-script-executable: scripts/localize-failure.sh is executable"
+else
+  fail "v7-localize-script-executable: scripts/localize-failure.sh is NOT executable"
+fi
+
+check "v7-localize-script-syntax: localize-failure.sh passes bash -n" bash -n scripts/localize-failure.sh
+
+if grep -q 'localization.json' scripts/localize-failure.sh; then
+  pass "v7-localize-output-file: localize-failure.sh outputs localization.json"
+else
+  fail "v7-localize-output-file: localize-failure.sh does NOT output localization.json"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-4: Localize Failure Functional Test
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Localize Failure Functional ==="
+
+LOCALIZE_TMPDIR=$(mktemp -d)
+
+# Test with a sample error log
+cat > "$LOCALIZE_TMPDIR/failure.log" << 'ERRLOG'
+Error in src/contracts/Token.ts:42
+  TypeError: Cannot read property 'balance' of undefined
+    at transfer (src/contracts/Token.ts:42:15)
+    at runTest (tests/token.test.ts:18:5)
+ERRLOG
+
+bash scripts/localize-failure.sh "$LOCALIZE_TMPDIR/failure.log" 2>&1 || true
+
+if [[ -f artifacts/localization.json ]]; then
+  pass "v7-localize-func-creates-json: localize-failure.sh creates localization.json"
+
+  LOC_FILE=$(python3 -c "import json; d=json.load(open('artifacts/localization.json')); print(d.get('file', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+  LOC_CONFIDENCE=$(python3 -c "import json; d=json.load(open('artifacts/localization.json')); print(d.get('confidence', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+  LOC_CATEGORY=$(python3 -c "import json; d=json.load(open('artifacts/localization.json')); print(d.get('failure_category', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+
+  if [[ "$LOC_FILE" != "unknown" && "$LOC_FILE" != "MISSING" ]]; then
+    pass "v7-localize-func-finds-file: localization identifies file ($LOC_FILE)"
+  else
+    fail "v7-localize-func-finds-file: localization did NOT identify file (got: $LOC_FILE)"
+  fi
+
+  if [[ "$LOC_CONFIDENCE" == "high" || "$LOC_CONFIDENCE" == "medium" ]]; then
+    pass "v7-localize-func-confidence: localization has good confidence ($LOC_CONFIDENCE)"
+  else
+    fail "v7-localize-func-confidence: localization has low confidence (got: $LOC_CONFIDENCE)"
+  fi
+
+  if [[ "$LOC_CATEGORY" != "unknown" && "$LOC_CATEGORY" != "MISSING" ]]; then
+    pass "v7-localize-func-category: localization identifies category ($LOC_CATEGORY)"
+  else
+    fail "v7-localize-func-category: localization did NOT identify category (got: $LOC_CATEGORY)"
+  fi
+else
+  fail "v7-localize-func-creates-json: localization.json NOT created"
+  fail "v7-localize-func-finds-file: (skipped — no JSON)"
+  fail "v7-localize-func-confidence: (skipped — no JSON)"
+  fail "v7-localize-func-category: (skipped — no JSON)"
+fi
+
+# Test with empty log
+echo "" > "$LOCALIZE_TMPDIR/empty.log"
+bash scripts/localize-failure.sh "$LOCALIZE_TMPDIR/empty.log" 2>&1 || true
+
+if [[ -f artifacts/localization.json ]]; then
+  EMPTY_CONFIDENCE=$(python3 -c "import json; d=json.load(open('artifacts/localization.json')); print(d.get('confidence', 'MISSING'))" 2>/dev/null || echo "PARSE_ERROR")
+  if [[ "$EMPTY_CONFIDENCE" == "low" ]]; then
+    pass "v7-localize-func-empty-low-confidence: empty log produces low confidence"
+  else
+    fail "v7-localize-func-empty-low-confidence: empty log does NOT produce low confidence (got: $EMPTY_CONFIDENCE)"
+  fi
+else
+  fail "v7-localize-func-empty-low-confidence: (skipped — no JSON)"
+fi
+
+rm -rf "$LOCALIZE_TMPDIR"
+rm -f artifacts/localization.json
+
+# ─────────────────────────────────────────────────
+# v7 TEST-5: Extract Requirements Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Extract Requirements Script ==="
+
+if [[ -f scripts/extract-requirements.sh ]]; then
+  pass "v7-extract-req-script-exists: scripts/extract-requirements.sh exists"
+else
+  fail "v7-extract-req-script-exists: scripts/extract-requirements.sh NOT found"
+fi
+
+if [[ -x scripts/extract-requirements.sh ]]; then
+  pass "v7-extract-req-script-executable: scripts/extract-requirements.sh is executable"
+else
+  fail "v7-extract-req-script-executable: scripts/extract-requirements.sh is NOT executable"
+fi
+
+check "v7-extract-req-script-syntax: extract-requirements.sh passes bash -n" bash -n scripts/extract-requirements.sh
+
+# ─────────────────────────────────────────────────
+# v7 TEST-6: Extract Requirements Functional
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Extract Requirements Functional ==="
+
+EXTRACT_TMPDIR=$(mktemp -d)
+cat > "$EXTRACT_TMPDIR/requirements.md" << 'REQMD'
+# Requirements
+
+1. Users can create tokens with a name and symbol
+2. Token transfers should deduct from sender and credit receiver
+3. Admin can mint new tokens
+REQMD
+
+bash scripts/extract-requirements.sh "$EXTRACT_TMPDIR/requirements.md" 2>&1 || true
+
+if [[ -f artifacts/evaluation/spec-requirements.yaml ]]; then
+  pass "v7-extract-req-func-creates-yaml: extract-requirements.sh creates spec-requirements.yaml"
+
+  REQ_COUNT=$(grep -c 'id:' artifacts/evaluation/spec-requirements.yaml || true)
+  if [[ "$REQ_COUNT" -ge 3 ]]; then
+    pass "v7-extract-req-func-count: extracted >= 3 requirements ($REQ_COUNT found)"
+  else
+    fail "v7-extract-req-func-count: extracted < 3 requirements ($REQ_COUNT found)"
+  fi
+
+  if grep -q 'has_test:' artifacts/evaluation/spec-requirements.yaml; then
+    pass "v7-extract-req-func-has-test-field: spec-requirements.yaml has has_test field"
+  else
+    fail "v7-extract-req-func-has-test-field: spec-requirements.yaml missing has_test field"
+  fi
+
+  if grep -q 'priority:' artifacts/evaluation/spec-requirements.yaml; then
+    pass "v7-extract-req-func-priority-field: spec-requirements.yaml has priority field"
+  else
+    fail "v7-extract-req-func-priority-field: spec-requirements.yaml missing priority field"
+  fi
+else
+  fail "v7-extract-req-func-creates-yaml: spec-requirements.yaml NOT created"
+  fail "v7-extract-req-func-count: (skipped — no YAML)"
+  fail "v7-extract-req-func-has-test-field: (skipped — no YAML)"
+  fail "v7-extract-req-func-priority-field: (skipped — no YAML)"
+fi
+
+rm -rf "$EXTRACT_TMPDIR"
+rm -f artifacts/evaluation/spec-requirements.yaml
+
+# ─────────────────────────────────────────────────
+# v7 TEST-7: Score Build Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Score Build Script ==="
+
+if [[ -f scripts/score-build.sh ]]; then
+  pass "v7-score-build-script-exists: scripts/score-build.sh exists"
+else
+  fail "v7-score-build-script-exists: scripts/score-build.sh NOT found"
+fi
+
+if [[ -x scripts/score-build.sh ]]; then
+  pass "v7-score-build-script-executable: scripts/score-build.sh is executable"
+else
+  fail "v7-score-build-script-executable: scripts/score-build.sh is NOT executable"
+fi
+
+check "v7-score-build-script-syntax: score-build.sh passes bash -n" bash -n scripts/score-build.sh
+
+# ─────────────────────────────────────────────────
+# v7 TEST-8: Score Build Functional
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Score Build Functional ==="
+
+# Clean up any leftover artifacts
+rm -rf artifacts/evaluation artifacts/testing artifacts/findings-ledger.md
+
+bash scripts/score-build.sh 2>&1 || true
+
+if [[ -f artifacts/evaluation/progress-tracker.yaml ]]; then
+  pass "v7-score-build-func-creates-yaml: score-build.sh creates progress-tracker.yaml"
+
+  if grep -q 'spec_coverage:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-spec-dim: progress-tracker has spec_coverage dimension"
+  else
+    fail "v7-score-build-func-spec-dim: progress-tracker missing spec_coverage dimension"
+  fi
+
+  if grep -q 'security_delta:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-security-dim: progress-tracker has security_delta dimension"
+  else
+    fail "v7-score-build-func-security-dim: progress-tracker missing security_delta dimension"
+  fi
+
+  if grep -q 'mutation_score:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-mutation-dim: progress-tracker has mutation_score dimension"
+  else
+    fail "v7-score-build-func-mutation-dim: progress-tracker missing mutation_score dimension"
+  fi
+
+  if grep -q 'code_health:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-health-dim: progress-tracker has code_health dimension"
+  else
+    fail "v7-score-build-func-health-dim: progress-tracker missing code_health dimension"
+  fi
+
+  if grep -q 'overall_verdict:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-verdict: progress-tracker has overall_verdict"
+  else
+    fail "v7-score-build-func-verdict: progress-tracker missing overall_verdict"
+  fi
+
+  if grep -q 'threshold:' artifacts/evaluation/progress-tracker.yaml; then
+    pass "v7-score-build-func-thresholds: progress-tracker has threshold entries"
+  else
+    fail "v7-score-build-func-thresholds: progress-tracker missing threshold entries"
+  fi
+else
+  fail "v7-score-build-func-creates-yaml: progress-tracker.yaml NOT created"
+  fail "v7-score-build-func-spec-dim: (skipped — no YAML)"
+  fail "v7-score-build-func-security-dim: (skipped — no YAML)"
+  fail "v7-score-build-func-mutation-dim: (skipped — no YAML)"
+  fail "v7-score-build-func-health-dim: (skipped — no YAML)"
+  fail "v7-score-build-func-verdict: (skipped — no YAML)"
+  fail "v7-score-build-func-thresholds: (skipped — no YAML)"
+fi
+
+rm -rf artifacts/evaluation
+
+# ─────────────────────────────────────────────────
+# v7 TEST-9: Build Repo Map Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Build Repo Map Script ==="
+
+if [[ -f scripts/build-repo-map.sh ]]; then
+  pass "v7-repo-map-script-exists: scripts/build-repo-map.sh exists"
+else
+  fail "v7-repo-map-script-exists: scripts/build-repo-map.sh NOT found"
+fi
+
+if [[ -x scripts/build-repo-map.sh ]]; then
+  pass "v7-repo-map-script-executable: scripts/build-repo-map.sh is executable"
+else
+  fail "v7-repo-map-script-executable: scripts/build-repo-map.sh is NOT executable"
+fi
+
+check "v7-repo-map-script-syntax: build-repo-map.sh passes bash -n" bash -n scripts/build-repo-map.sh
+
+# ─────────────────────────────────────────────────
+# v7 TEST-10: Build Repo Map Functional
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Build Repo Map Functional ==="
+
+REPOMAP_TMPDIR=$(mktemp -d)
+
+# Create a minimal ABI
+cat > "$REPOMAP_TMPDIR/abi.json" << 'ABIJSON'
+[
+  {"type": "function", "name": "transfer", "inputs": [{"name": "to", "type": "address"}, {"name": "amount", "type": "u256"}], "outputs": [{"type": "bool"}]},
+  {"type": "function", "name": "balanceOf", "inputs": [{"name": "owner", "type": "address"}], "outputs": [{"type": "u256"}]},
+  {"type": "event", "name": "Transfer", "inputs": [{"name": "from", "type": "address"}, {"name": "to", "type": "address"}, {"name": "value", "type": "u256"}]}
+]
+ABIJSON
+
+rm -f artifacts/repo-map.md
+bash scripts/build-repo-map.sh "$REPOMAP_TMPDIR/abi.json" "" "" 2>&1 || true
+
+if [[ -f artifacts/repo-map.md ]]; then
+  pass "v7-repo-map-func-creates-md: build-repo-map.sh creates repo-map.md"
+
+  if grep -q 'Contract Layer' artifacts/repo-map.md; then
+    pass "v7-repo-map-func-contract-layer: repo-map.md has Contract Layer section"
+  else
+    fail "v7-repo-map-func-contract-layer: repo-map.md missing Contract Layer section"
+  fi
+
+  if grep -q 'transfer' artifacts/repo-map.md; then
+    pass "v7-repo-map-func-method-listed: repo-map.md lists transfer method"
+  else
+    fail "v7-repo-map-func-method-listed: repo-map.md does NOT list transfer method"
+  fi
+
+  if grep -q 'Frontend Layer' artifacts/repo-map.md; then
+    pass "v7-repo-map-func-frontend-layer: repo-map.md has Frontend Layer section"
+  else
+    fail "v7-repo-map-func-frontend-layer: repo-map.md missing Frontend Layer section"
+  fi
+
+  if grep -q 'Backend Layer' artifacts/repo-map.md; then
+    pass "v7-repo-map-func-backend-layer: repo-map.md has Backend Layer section"
+  else
+    fail "v7-repo-map-func-backend-layer: repo-map.md missing Backend Layer section"
+  fi
+
+  if grep -q 'Cross-Layer Integrity' artifacts/repo-map.md; then
+    pass "v7-repo-map-func-integrity: repo-map.md has Cross-Layer Integrity section"
+  else
+    fail "v7-repo-map-func-integrity: repo-map.md missing Cross-Layer Integrity section"
+  fi
+
+  REPOMAP_LINES=$(wc -l < artifacts/repo-map.md | tr -d ' ')
+  if [[ "$REPOMAP_LINES" -lt 300 ]]; then
+    pass "v7-repo-map-func-under-300: repo-map.md is under 300 lines ($REPOMAP_LINES lines)"
+  else
+    fail "v7-repo-map-func-under-300: repo-map.md is >= 300 lines ($REPOMAP_LINES lines)"
+  fi
+else
+  fail "v7-repo-map-func-creates-md: repo-map.md NOT created"
+  fail "v7-repo-map-func-contract-layer: (skipped — no file)"
+  fail "v7-repo-map-func-method-listed: (skipped — no file)"
+  fail "v7-repo-map-func-frontend-layer: (skipped — no file)"
+  fail "v7-repo-map-func-backend-layer: (skipped — no file)"
+  fail "v7-repo-map-func-integrity: (skipped — no file)"
+  fail "v7-repo-map-func-under-300: (skipped — no file)"
+fi
+
+rm -rf "$REPOMAP_TMPDIR"
+rm -f artifacts/repo-map.md
+
+# ─────────────────────────────────────────────────
+# v7 TEST-11: Buidl Optimize Command
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Buidl Optimize Command ==="
+
+if [[ -f commands/buidl-optimize.md ]]; then
+  pass "v7-optimize-cmd-exists: commands/buidl-optimize.md exists"
+else
+  fail "v7-optimize-cmd-exists: commands/buidl-optimize.md NOT found"
+fi
+
+# Check frontmatter
+if head -5 commands/buidl-optimize.md | grep -q 'description:'; then
+  pass "v7-optimize-cmd-description: buidl-optimize.md has description in frontmatter"
+else
+  fail "v7-optimize-cmd-description: buidl-optimize.md missing description in frontmatter"
+fi
+
+if head -10 commands/buidl-optimize.md | grep -q 'argument-hint:'; then
+  pass "v7-optimize-cmd-argument-hint: buidl-optimize.md has argument-hint in frontmatter"
+else
+  fail "v7-optimize-cmd-argument-hint: buidl-optimize.md missing argument-hint in frontmatter"
+fi
+
+if head -10 commands/buidl-optimize.md | grep -q 'allowed-tools:'; then
+  pass "v7-optimize-cmd-allowed-tools: buidl-optimize.md has allowed-tools in frontmatter"
+else
+  fail "v7-optimize-cmd-allowed-tools: buidl-optimize.md missing allowed-tools in frontmatter"
+fi
+
+# Check FORBIDDEN section
+if grep -q 'FORBIDDEN' commands/buidl-optimize.md; then
+  pass "v7-optimize-cmd-forbidden: buidl-optimize.md has FORBIDDEN section"
+else
+  fail "v7-optimize-cmd-forbidden: buidl-optimize.md missing FORBIDDEN section"
+fi
+
+# Check supported metrics
+for metric in gas bundle_size test_time throughput; do
+  if grep -q "$metric" commands/buidl-optimize.md; then
+    pass "v7-optimize-cmd-metric-${metric}: buidl-optimize.md supports $metric metric"
+  else
+    fail "v7-optimize-cmd-metric-${metric}: buidl-optimize.md missing $metric metric"
+  fi
+done
+
+# Check max_cycles default
+if grep -q '10' commands/buidl-optimize.md; then
+  pass "v7-optimize-cmd-max-cycles: buidl-optimize.md mentions default 10 max cycles"
+else
+  fail "v7-optimize-cmd-max-cycles: buidl-optimize.md missing default 10 max cycles"
+fi
+
+# Check output artifacts
+if grep -q 'summary.md' commands/buidl-optimize.md; then
+  pass "v7-optimize-cmd-output-summary: buidl-optimize.md references summary.md output"
+else
+  fail "v7-optimize-cmd-output-summary: buidl-optimize.md missing summary.md output reference"
+fi
+
+if grep -q 'best-result.json' commands/buidl-optimize.md; then
+  pass "v7-optimize-cmd-output-best: buidl-optimize.md references best-result.json output"
+else
+  fail "v7-optimize-cmd-output-best: buidl-optimize.md missing best-result.json output reference"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-12: Mutation Gate in Orchestrator
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Mutation Gate in Orchestrator ==="
+
+if grep -q 'mutate-contract.sh' commands/buidl.md; then
+  pass "v7-mutation-gate-in-buidl: buidl.md references mutate-contract.sh"
+else
+  fail "v7-mutation-gate-in-buidl: buidl.md does NOT reference mutate-contract.sh"
+fi
+
+if grep -q 'mutation_score' commands/buidl.md; then
+  pass "v7-mutation-gate-score-check: buidl.md checks mutation_score"
+else
+  fail "v7-mutation-gate-score-check: buidl.md does NOT check mutation_score"
+fi
+
+if grep -q '0.70' commands/buidl.md; then
+  pass "v7-mutation-gate-threshold: buidl.md has 0.70 threshold"
+else
+  fail "v7-mutation-gate-threshold: buidl.md missing 0.70 threshold"
+fi
+
+# Mutation gate should be in Phase 5 (REVIEW section)
+if sed -n '/PHASE 5/,/PHASE 6/p' commands/buidl.md | grep -q 'mutate-contract.sh'; then
+  pass "v7-mutation-gate-phase5: mutation gate is in Phase 5 section"
+else
+  fail "v7-mutation-gate-phase5: mutation gate is NOT in Phase 5 section"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-13: Structured Repair Phases in Orchestrator
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Structured Repair Phases ==="
+
+if grep -q 'Phase R1' commands/buidl.md; then
+  pass "v7-repair-r1-in-buidl: buidl.md has Phase R1 (LOCALIZE)"
+else
+  fail "v7-repair-r1-in-buidl: buidl.md missing Phase R1"
+fi
+
+if grep -q 'Phase R2' commands/buidl.md; then
+  pass "v7-repair-r2-in-buidl: buidl.md has Phase R2 (PATCH)"
+else
+  fail "v7-repair-r2-in-buidl: buidl.md missing Phase R2"
+fi
+
+if grep -q 'Phase R3' commands/buidl.md; then
+  pass "v7-repair-r3-in-buidl: buidl.md has Phase R3 (VALIDATE)"
+else
+  fail "v7-repair-r3-in-buidl: buidl.md missing Phase R3"
+fi
+
+if grep -q 'localize-failure.sh' commands/buidl.md; then
+  pass "v7-repair-localize-ref: buidl.md references localize-failure.sh"
+else
+  fail "v7-repair-localize-ref: buidl.md does NOT reference localize-failure.sh"
+fi
+
+if grep -q 'localization.json' commands/buidl.md; then
+  pass "v7-repair-localization-json: buidl.md references localization.json output"
+else
+  fail "v7-repair-localization-json: buidl.md does NOT reference localization.json"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-14: Score Build in Orchestrator
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Score Build in Orchestrator ==="
+
+if grep -q 'score-build.sh' commands/buidl.md; then
+  pass "v7-score-build-in-buidl: buidl.md references score-build.sh"
+else
+  fail "v7-score-build-in-buidl: buidl.md does NOT reference score-build.sh"
+fi
+
+if grep -q 'progress-tracker.yaml' commands/buidl.md; then
+  pass "v7-score-build-tracker-ref: buidl.md references progress-tracker.yaml"
+else
+  fail "v7-score-build-tracker-ref: buidl.md does NOT reference progress-tracker.yaml"
+fi
+
+if grep -q 'spec_coverage' commands/buidl.md; then
+  pass "v7-score-build-spec-dim: buidl.md has spec_coverage dimension"
+else
+  fail "v7-score-build-spec-dim: buidl.md missing spec_coverage dimension"
+fi
+
+if grep -q 'security_delta' commands/buidl.md; then
+  pass "v7-score-build-security-dim: buidl.md has security_delta dimension"
+else
+  fail "v7-score-build-security-dim: buidl.md missing security_delta dimension"
+fi
+
+if grep -q 'code_health' commands/buidl.md; then
+  pass "v7-score-build-health-dim: buidl.md has code_health dimension"
+else
+  fail "v7-score-build-health-dim: buidl.md missing code_health dimension"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-15: Repo Map in Orchestrator
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Repo Map in Orchestrator ==="
+
+if grep -q 'build-repo-map.sh' commands/buidl.md; then
+  pass "v7-repo-map-in-buidl: buidl.md references build-repo-map.sh"
+else
+  fail "v7-repo-map-in-buidl: buidl.md does NOT reference build-repo-map.sh"
+fi
+
+if grep -q 'repo-map.md' commands/buidl.md; then
+  pass "v7-repo-map-artifact-ref: buidl.md references repo-map.md artifact"
+else
+  fail "v7-repo-map-artifact-ref: buidl.md does NOT reference repo-map.md artifact"
+fi
+
+# Check that repo map is generated after ABI lock
+if sed -n '/ABI Lock/,/Issue Check/p' commands/buidl.md | grep -q 'build-repo-map.sh'; then
+  pass "v7-repo-map-after-abi-lock: repo map generated after ABI lock in buidl.md"
+else
+  fail "v7-repo-map-after-abi-lock: repo map NOT generated after ABI lock in buidl.md"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-16: Agent Repo Map References
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Agent Repo Map References ==="
+
+V7_AGENTS=(cross-layer-validator loop-builder loop-explorer loop-researcher loop-reviewer opnet-auditor opnet-backend-dev opnet-contract-dev opnet-deployer opnet-e2e-tester opnet-frontend-dev opnet-ui-tester)
+
+for agent in "${V7_AGENTS[@]}"; do
+  if grep -q 'repo-map.md' "agents/${agent}.md"; then
+    pass "v7-agent-repomap-${agent}: ${agent}.md references repo-map.md"
+  else
+    fail "v7-agent-repomap-${agent}: ${agent}.md does NOT reference repo-map.md"
+  fi
+done
+
+# Verify adversarial agents do NOT have repo-map reference
+for agent in opnet-adversarial-auditor opnet-adversarial-tester; do
+  if grep -q 'repo-map.md' "agents/${agent}.md" 2>/dev/null; then
+    fail "v7-agent-repomap-no-${agent}: ${agent}.md should NOT reference repo-map.md"
+  else
+    pass "v7-agent-repomap-no-${agent}: ${agent}.md correctly does NOT reference repo-map.md"
+  fi
+done
+
+# ─────────────────────────────────────────────────
+# v7 TEST-17: Localize Mode in Reviewer
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Localize Mode in Reviewer ==="
+
+if grep -q 'Localize Mode' agents/loop-reviewer.md; then
+  pass "v7-localize-mode-in-reviewer: loop-reviewer.md has Localize Mode section"
+else
+  fail "v7-localize-mode-in-reviewer: loop-reviewer.md missing Localize Mode section"
+fi
+
+if grep -q 'max_turns.*5' agents/loop-reviewer.md; then
+  pass "v7-localize-mode-max-turns: Localize Mode has max_turns 5"
+else
+  fail "v7-localize-mode-max-turns: Localize Mode missing max_turns 5"
+fi
+
+if grep -q 'READ-ONLY' agents/loop-reviewer.md; then
+  pass "v7-localize-mode-readonly: Localize Mode is READ-ONLY"
+else
+  fail "v7-localize-mode-readonly: Localize Mode missing READ-ONLY constraint"
+fi
+
+if grep -q 'FORBIDDEN in Localize Mode' agents/loop-reviewer.md; then
+  pass "v7-localize-mode-forbidden: Localize Mode has FORBIDDEN section"
+else
+  fail "v7-localize-mode-forbidden: Localize Mode missing FORBIDDEN section"
+fi
+
+# Localize Mode should appear AFTER Critique Mode
+CRITIQUE_LINE=$(grep -n 'Critique Mode' agents/loop-reviewer.md | head -1 | cut -d: -f1)
+LOCALIZE_LINE=$(grep -n 'Localize Mode' agents/loop-reviewer.md | head -1 | cut -d: -f1)
+if [[ -n "$CRITIQUE_LINE" && -n "$LOCALIZE_LINE" && "$LOCALIZE_LINE" -gt "$CRITIQUE_LINE" ]]; then
+  pass "v7-localize-mode-after-critique: Localize Mode appears after Critique Mode"
+else
+  fail "v7-localize-mode-after-critique: Localize Mode does NOT appear after Critique Mode"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-18: Buidl Status Updates
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Buidl Status Updates ==="
+
+if grep -q 'Mutation' commands/buidl-status.md; then
+  pass "v7-status-mutation: buidl-status.md shows mutation score"
+else
+  fail "v7-status-mutation: buidl-status.md does NOT show mutation score"
+fi
+
+if grep -q 'mutation-score.json' commands/buidl-status.md; then
+  pass "v7-status-mutation-json: buidl-status.md references mutation-score.json"
+else
+  fail "v7-status-mutation-json: buidl-status.md does NOT reference mutation-score.json"
+fi
+
+if grep -q 'Build Score' commands/buidl-status.md; then
+  pass "v7-status-build-score: buidl-status.md shows build score card"
+else
+  fail "v7-status-build-score: buidl-status.md does NOT show build score card"
+fi
+
+if grep -q 'progress-tracker.yaml' commands/buidl-status.md; then
+  pass "v7-status-tracker-ref: buidl-status.md references progress-tracker.yaml"
+else
+  fail "v7-status-tracker-ref: buidl-status.md does NOT reference progress-tracker.yaml"
+fi
+
+# Verify steps are properly renumbered (old step 7 is now step 9)
+if grep -q '^9\. ' commands/buidl-status.md; then
+  pass "v7-status-renumbered-9: buidl-status.md has step 9"
+else
+  fail "v7-status-renumbered-9: buidl-status.md missing step 9"
+fi
+
+if grep -q '^12\. ' commands/buidl-status.md; then
+  pass "v7-status-renumbered-12: buidl-status.md has step 12"
+else
+  fail "v7-status-renumbered-12: buidl-status.md missing step 12"
+fi
+
+# ─────────────────────────────────────────────────
+# v7 TEST-19: CHANGELOG and README Updates
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== CHANGELOG and README Updates ==="
+
+if grep -q '\[7\.0\.0\]' CHANGELOG.md; then
+  pass "v7-changelog-entry: CHANGELOG.md has [7.0.0] entry"
+else
+  fail "v7-changelog-entry: CHANGELOG.md missing [7.0.0] entry"
+fi
+
+# 7.0.0 should come before 6.0.0
+V7_LINE=$(grep -n '\[7\.0\.0\]' CHANGELOG.md | head -1 | cut -d: -f1)
+V6_LINE=$(grep -n '\[6\.0\.0\]' CHANGELOG.md | head -1 | cut -d: -f1)
+if [[ -n "$V7_LINE" && -n "$V6_LINE" && "$V7_LINE" -lt "$V6_LINE" ]]; then
+  pass "v7-changelog-order: [7.0.0] comes before [6.0.0] in CHANGELOG"
+else
+  fail "v7-changelog-order: [7.0.0] does NOT come before [6.0.0] in CHANGELOG"
+fi
+
+if grep -q 'buidl-optimize' README.md; then
+  pass "v7-readme-optimize-cmd: README.md mentions buidl-optimize command"
+else
+  fail "v7-readme-optimize-cmd: README.md does NOT mention buidl-optimize command"
+fi
+
+if grep -q 'v7\.0\.0' README.md; then
+  pass "v7-readme-version-history: README.md has v7.0.0 in version history"
+else
+  fail "v7-readme-version-history: README.md missing v7.0.0 in version history"
+fi
+
+if grep -q 'Mutation' README.md; then
+  pass "v7-readme-mutation-feature: README.md mentions mutation testing feature"
+else
+  fail "v7-readme-mutation-feature: README.md does NOT mention mutation testing feature"
+fi
+
+if grep -q 'Structured Repair' README.md; then
+  pass "v7-readme-repair-feature: README.md mentions structured repair feature"
+else
+  fail "v7-readme-repair-feature: README.md does NOT mention structured repair feature"
+fi
+
+if grep -q 'Goal-Oriented' README.md; then
+  pass "v7-readme-scoring-feature: README.md mentions goal-oriented evaluation feature"
+else
+  fail "v7-readme-scoring-feature: README.md does NOT mention goal-oriented evaluation feature"
+fi
+
+if grep -q 'Repo Map' README.md; then
+  pass "v7-readme-repomap-feature: README.md mentions repo map feature"
+else
+  fail "v7-readme-repomap-feature: README.md does NOT mention repo map feature"
+fi
 
 # ─────────────────────────────────────────────────
 # Summary

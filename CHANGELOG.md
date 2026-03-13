@@ -1,5 +1,30 @@
 # Changelog
 
+## [7.0.0] - 2026-03-13
+
+### Added
+- **Mutation testing as loop exit gate** (`scripts/mutate-contract.sh`): Applies 20 sed-level mutation operators to contract source files. For each mutant: creates a temp copy, applies the mutation, compiles, runs tests. If tests fail, the mutant is killed (good). If tests pass or compilation fails, the mutant survived (bad). Outputs `artifacts/testing/mutation-score.json` with total_mutants, killed, survived, compile_errors, mutation_score (0-1), threshold (0.70), verdict (PASS/FAIL), and survivors list. Phase 5 runs this gate before the reviewer -- score below 0.70 routes back to contract-dev with the survivors list.
+- **Structured repair phases** (Agentless R1/R2/R3 pattern): Replaces "re-run agent with failure context" with three targeted phases. Phase R1 (LOCALIZE): max_turns 5, READ-ONLY, reviewer in localize mode produces localization.json. Phase R2 (PATCH): max_turns 10, domain agent receives localized context only, generates up to 3 candidate patches. Phase R3 (VALIDATE): automated, runs tests and mutation on each candidate, picks the best.
+- **Failure localization script** (`scripts/localize-failure.sh`): Parses failure logs to extract file, function, line_range, suspected_cause, confidence, and failure_category. Outputs `artifacts/localization.json`.
+- **Localize Mode** (`agents/loop-reviewer.md`): New reviewer mode for Phase R1 -- strict 5-turn READ-ONLY process. Produces localization.json only. Code generation is FORBIDDEN.
+- **Goal-oriented build evaluation** (`scripts/score-build.sh`): Evaluates builds across 4 dimensions: spec_coverage (requirements with tests / total, threshold 90%), security_delta (open findings count, threshold 0), mutation_score (from mutation-score.json, threshold 70%), code_health (100 minus weighted penalties, threshold 60%). Outputs `artifacts/evaluation/progress-tracker.yaml`. All thresholds must be met. Failed dimensions route to responsible agents.
+- **Requirements extraction** (`scripts/extract-requirements.sh`): Parses requirements.md and extracts individual requirements into `artifacts/evaluation/spec-requirements.yaml` with id, description, has_test, and priority fields.
+- **Hierarchical cross-layer repo map** (`scripts/build-repo-map.sh`): Generates `artifacts/repo-map.md` with Contract Layer (from abi.json: methods, events, storage slots), Frontend Layer (components, hooks, services, contract calls), Backend Layer (routes, services, contract calls), and Cross-Layer Integrity Checks (missing methods, uncalled methods). Target under 300 lines.
+- **Autoresearch optimize mode** (`commands/buidl-optimize.md`): New `/buidl-optimize` command for automated metric optimization. Supports gas, bundle_size, test_time, and throughput metrics. Runs a hypothesis-implement-benchmark-keep/revert cycle up to 10 times. Outputs summary.md, best-result.json, and auto-creates a PR with kept changes.
+
+### Changed
+- **Orchestrator Phase 5** (`commands/buidl.md`): Mutation gate runs before reviewer dispatch. If mutation score < 0.70, routes back to contract-dev with survivors. Score-build runs after each review cycle, displaying a compact 4-dimension score table. All thresholds must be met for build completion.
+- **Orchestrator agent failure handling** (`commands/buidl.md`): Agent failures now go through R1/R2/R3 structured repair before falling back to manual options. Localization produces targeted context, domain agents generate candidate patches, and validation picks the best one automatically.
+- **Orchestrator Phase 4** (`commands/buidl.md`): Repo map generated after ABI lock (contract layer only), regenerated after all builders complete (all layers populated).
+- **Orchestrator FAIL routing** (`commands/buidl.md`): Uses R1/R2/R3 structured repair for targeted fixes instead of raw agent re-dispatch with full failure context.
+- **All 12 domain agent files**: Updated Step 0 / knowledge loading to reference `artifacts/repo-map.md` for cross-layer context. Agents: cross-layer-validator, loop-builder, loop-explorer, loop-researcher, loop-reviewer, opnet-auditor, opnet-backend-dev, opnet-contract-dev, opnet-deployer, opnet-e2e-tester, opnet-frontend-dev, opnet-ui-tester.
+- **buidl-status** (`commands/buidl-status.md`): Shows mutation score ("Mutation: 83% (15/18 killed)") and 4-dimension build score card when available. Steps renumbered from 7-10 to 9-12.
+- **loop-reviewer** (`agents/loop-reviewer.md`): Added Localize Mode section after Critique Mode.
+- **Plugin version**: 6.0.0 -> 7.0.0
+
+### Why
+Four gaps identified in the build verification and repair systems. (1) The loop had no way to measure test quality -- tests could pass while missing entire categories of bugs. Mutation testing quantifies test effectiveness by checking whether tests detect deliberate code changes. (2) When agents failed, the entire failure context was re-injected, leading to unfocused repair attempts. Structured R1/R2/R3 phases localize the failure first, then generate targeted patches, then validate them automatically. (3) The reviewer produced a single PASS/FAIL verdict with no multi-dimensional visibility. Goal-oriented evaluation scores across 4 dimensions (spec coverage, security, mutation, code health) with clear thresholds and routing for each. (4) Agents had no shared map of how contract methods connected to frontend calls and backend routes. The hierarchical repo map provides cross-layer visibility, and integrity checks automatically detect missing or extra method calls.
+
 ## [6.0.0] - 2026-03-13
 
 ### Added

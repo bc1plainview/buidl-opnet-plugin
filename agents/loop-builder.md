@@ -153,6 +153,8 @@ Check in this order:
 - Use `deriveOPWallet()` not `derive()` for OPWallet-compatible keys
 - `Buffer` is gone — use `BufferHelper` from `@btc-vision/transaction`
 
+4. If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
+
 ---
 
 ## Step 0.5: Load PUA Methodology (MANDATORY)

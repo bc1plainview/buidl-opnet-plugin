@@ -55,6 +55,8 @@ Also read [knowledge/slices/transaction-simulation.md](knowledge/slices/transact
 
 If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 
+If `artifacts/repo-map.md` exists, read it for cross-layer context (contract methods, frontend components, backend routes, integrity checks).
+
 ## Process
 
 ### 1. Pre-Deploy Verification (MANDATORY)
