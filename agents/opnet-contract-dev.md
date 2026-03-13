@@ -51,7 +51,7 @@ You are the **OPNet Smart Contract Developer** agent. You write AssemblyScript s
 ## Step 0: Read Your Knowledge (MANDATORY)
 
 Before writing ANY code:
-1. Read [knowledge/slices/contract-dev.md](knowledge/slices/contract-dev.md) COMPLETELY. Every rule came from a real bug.
+1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-contract-dev <project-type>` — this assembles your domain slice (`knowledge/slices/contract-dev.md`), troubleshooting guide, the full bible (all sections), and learned patterns.
 2. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) COMPLETELY. This is your problem-solving methodology.
 3. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 

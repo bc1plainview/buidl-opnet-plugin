@@ -24,6 +24,7 @@
 
 ---
 
+<!-- BEGIN-SECTION-1 [CONTRACT] [FRONTEND] [BACKEND] -->
 ## 1. Architecture Overview
 
 ### What OPNet Is
@@ -80,7 +81,9 @@ Transaction pinning is a catastrophic attack where an attacker creates massive c
 ALL addresses receiving BTC in OPNet swaps MUST use CSV timelocks.
 
 ---
+<!-- END-SECTION-1 -->
 
+<!-- BEGIN-SECTION-2 [CONTRACT] [FRONTEND] [BACKEND] -->
 ## 2. Package Versions & Setup
 
 ### NEVER GUESS PACKAGE VERSIONS
@@ -594,7 +597,9 @@ wcm-modal::part(container) {
 ```
 
 ---
+<!-- END-SECTION-2 -->
 
+<!-- BEGIN-SECTION-3 [CONTRACT] -->
 ## 3. Contract Development Rules
 
 ### Contract Entry Point — Required Structure
@@ -912,7 +917,9 @@ export class MyContract extends Upgradeable {
 ```
 
 ---
+<!-- END-SECTION-3 -->
 
+<!-- BEGIN-SECTION-4 [FRONTEND] -->
 ## 4. Frontend Development Rules
 
 ### ABSOLUTE RULES (Never Violate)
@@ -1225,8 +1232,11 @@ const receipt = await sim.sendTransaction({
 
 **setTransactionDetails() clears after each call. Call it right before every simulate that needs it.**
 
----
 
+---
+<!-- END-SECTION-4 -->
+
+<!-- BEGIN-SECTION-5 [BACKEND] -->
 ## 5. Backend Development Rules
 
 ### Required Frameworks
@@ -1312,7 +1322,9 @@ const wallet = mnemonic.derive(0);
 ```
 
 ---
+<!-- END-SECTION-5 -->
 
+<!-- BEGIN-SECTION-6 [CONTRACT] [FRONTEND] [BACKEND] [DEPLOYMENT] -->
 ## 6. Transaction Rules
 
 ### The Absolute Law
@@ -1347,7 +1359,9 @@ BACKEND:  signer: wallet.keypair, mldsaSigner: wallet.mldsaKeypair
 There are NO exceptions. Mixing these up = private key leak or broken transaction.
 
 ---
+<!-- END-SECTION-6 -->
 
+<!-- BEGIN-SECTION-7 [CONTRACT] [FRONTEND] [BACKEND] -->
 ## 7. Common Agent Mistakes
 
 **These are real mistakes AI agents make repeatedly. If you catch yourself doing any of these, STOP.**
@@ -1387,8 +1401,11 @@ There are NO exceptions. Mixing these up = private key leak or broken transactio
 | Constructor trap in contracts | OPNet constructor runs on EVERY interaction. Minting/state changes in constructor runs every call! | Put ALL initialization logic in `onDeployment()`, which runs only ONCE. |
 | `@method()` with no params | Zero ABI inputs declared. Callers must hand-roll calldata. Breaks SDK. Requires redeployment. | ALWAYS declare all method params: `@method({ name: 'to', type: ABIDataTypes.ADDRESS }, ...)` |
 
----
 
+---
+<!-- END-SECTION-7 -->
+
+<!-- BEGIN-SECTION-8 [FRONTEND] -->
 ## 8. Known Frontend Mistakes (All 19)
 
 ### 1. Using `contract.execute()` with raw selector bytes
@@ -1680,8 +1697,11 @@ const spenderAddress = Address.fromString(CONTRACTS.BLOCK_IDO_0X);
 const sim = await motoContract.increaseAllowance(spenderAddress, amount);
 ```
 
----
 
+---
+<!-- END-SECTION-8 -->
+
+<!-- BEGIN-SECTION-9 [SECURITY] -->
 ## 9. Security Checklist
 
 ### Contract Security
@@ -1754,7 +1774,9 @@ public transfer(calldata: Calldata): BytesWriter {
 ```
 
 ---
+<!-- END-SECTION-9 -->
 
+<!-- BEGIN-SECTION-10 [SECURITY] [CONTRACT] -->
 ## 10. Signature Verification
 
 ### The ONLY Correct Approach
@@ -1809,7 +1831,9 @@ MessageSigner.signMLDSAMessage(mldsaKeypair, message);
 ```
 
 ---
+<!-- END-SECTION-10 -->
 
+<!-- BEGIN-SECTION-11 [DEPLOYMENT] -->
 ## 11. Deployment
 
 ### Gas Limits
@@ -1862,8 +1886,11 @@ bash /path/to/opnet-cli/scripts/ipfs-upload.sh ./dist mysite --dry-run
 
 **REQUIRED for IPFS**: `base: './'` in vite.config.ts (NOT `base: '/'`)
 
----
 
+---
+<!-- END-SECTION-11 -->
+
+<!-- BEGIN-SECTION-12 [CONTRACT] [FRONTEND] [BACKEND] -->
 ## 12. Quick Reference
 
 ### Network Endpoints
@@ -1971,5 +1998,6 @@ import { Address, BinaryWriter, BinaryReader } from '@btc-vision/transaction';
 ```
 
 ---
+<!-- END-SECTION-12 -->
 
 *This bible was synthesized from all OPNet development documentation, guidelines, known mistakes, and real-world debugging sessions. Keep it updated as the ecosystem evolves.*

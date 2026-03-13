@@ -1,5 +1,28 @@
 # Changelog
 
+## [6.0.0] - 2026-03-13
+
+### Added
+- **Dynamic knowledge slice loading** (`scripts/load-knowledge.sh`): Assembles role-specific knowledge payloads per agent. Always includes the agent's domain slice and troubleshooting guide. Conditionally includes tagged sections of `knowledge/opnet-bible.md` based on agent role (contract-dev=full, frontend-dev=[FRONTEND] only, backend-dev=[BACKEND] only, auditor=[SECURITY] only, deployer=[DEPLOYMENT] only). Includes non-stale [LEARNED] patterns from `learning/patterns.yaml`. Caps output at 400 lines max, truncating least-relevant sections first with a truncation note.
+- **Opnet bible section tagging**: All 12 sections of `knowledge/opnet-bible.md` tagged with HTML comment markers (`BEGIN-SECTION-N [TAGS]` / `END-SECTION-N`) for role-based filtering. Tags: [CONTRACT], [FRONTEND], [BACKEND], [SECURITY], [DEPLOYMENT].
+- **Property-based fuzz case generator** (`scripts/fuzz-contract.sh`): Reads ABI JSON, extracts @method signatures and param types, generates boundary test cases (u256: [0, 1, 2^128, 2^256-1, 2^256-2], address: [zero, contract, caller], bool: [true, false]), generates all single-param boundary combinations plus 10 random valid-type combinations, and outputs `artifacts/testing/fuzz-cases.json`. Does NOT send transactions.
+- **Stale pattern pruning** (`scripts/update-scores.sh --prune`): Removes agent entries with >30 sessions or success_rate <0.2 with 10+ data points. Logs removals to `learning/prune-log.yaml`.
+- **Pattern staleness tracking** (`scripts/extract-patterns.sh`): Adds `last_seen_version` field to new patterns and `stale: true` flag based on major version comparison (2+ major versions behind = stale).
+- **Learning system health report** (`scripts/audit-learning.sh`): Prints pattern counts (total/stale/active/promoted), agent scores summary, profile count, and prune log. Available via `/buidl-learning` command.
+- **buidl-learning command** (`commands/buidl-learning.md`): New `/buidl-learning` slash command that runs the learning health report.
+
+### Changed
+- **Agent knowledge loading**: All 14 agent .md files updated to reference `scripts/load-knowledge.sh` for dynamic knowledge assembly instead of static file references. Slice names retained as comments for orphan detection.
+- **Orchestrator dispatch** (`commands/buidl.md`): Phase 4 agent dispatches now call `load-knowledge.sh` to assemble agent-specific knowledge payloads.
+- **Orchestrator Step 2c.5** (`commands/buidl.md`): Adversarial audit step now runs `fuzz-contract.sh` to generate fuzz cases before dispatching the adversarial auditor.
+- **Adversarial auditor agent**: Step 3 now references `fuzz-cases.json` as input for invariant testing.
+- **Adversarial E2E tester agent**: Step 1 now reads `fuzz-cases.json` for boundary value transaction testing.
+- **buidl-status**: Now includes a one-line learning health summary.
+- **Plugin version**: 5.0.0 -> 6.0.0
+
+### Why
+Three gaps identified in the knowledge and learning systems. (1) Agents loaded the full 2000-line bible regardless of role, wasting context budget. Dynamic loading filters to role-relevant sections, keeping payloads under 400 lines. (2) Adversarial auditing tested invariants but had no systematic boundary value generation. The fuzz case generator creates structured test cases from ABI signatures, covering the exact boundary values that cause real bugs (u256 overflow, zero addresses, max values). (3) The pattern store grew without bounds and had no staleness tracking. Patterns from major versions ago may no longer be relevant. Version-based staleness and pruning keep the learning system lean.
+
 ## [5.0.0] - 2026-03-13
 
 ### Added

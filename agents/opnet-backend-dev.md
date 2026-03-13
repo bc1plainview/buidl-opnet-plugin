@@ -43,7 +43,7 @@ You are the **OPNet Backend Developer** agent. You build Node.js backend service
 ## Step 0: Read Your Knowledge (MANDATORY)
 
 Before writing ANY code:
-1. Read [knowledge/slices/backend-dev.md](knowledge/slices/backend-dev.md) COMPLETELY.
+1. Load your knowledge payload via `bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-knowledge.sh opnet-backend-dev <project-type>` — this assembles your domain slice (`knowledge/slices/backend-dev.md`), troubleshooting guide, relevant bible sections ([BACKEND]), and learned patterns.
 2. Read [skills/pua/SKILL.md](skills/pua/SKILL.md) COMPLETELY. This is your problem-solving methodology.
 3. If you encounter issues, check [knowledge/opnet-troubleshooting.md](knowledge/opnet-troubleshooting.md).
 

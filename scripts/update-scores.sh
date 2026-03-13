@@ -1,10 +1,11 @@
 #!/bin/bash
 # update-scores.sh — Update agent performance scores after a session completes
 #
-# Usage: bash scripts/update-scores.sh <state-file> <session-outcome> [--findings <findings-file>]
+# Usage: bash scripts/update-scores.sh <state-file> <session-outcome> [--findings <findings-file>] [--prune]
 #   state-file: path to the session's state.yaml
 #   session-outcome: "pass" or "fail"
 #   --findings: optional path to categorized findings file for strengths/weaknesses tracking
+#   --prune: remove entries with >30 sessions or success_rate <0.2 with 10+ data points
 #
 # Reads agent_status from the state file, updates rolling metrics in
 # learning/agent-scores.yaml for each agent that was dispatched.
@@ -26,14 +27,19 @@ SCORES_FILE="$SCRIPT_DIR/learning/agent-scores.yaml"
 STATE_FILE="${1:-}"
 OUTCOME="${2:-}"
 FINDINGS_FILE=""
+PRUNE_MODE=false
 
-# Parse optional --findings flag
+# Parse optional --findings and --prune flags
 shift 2 2>/dev/null || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --findings)
       FINDINGS_FILE="${2:-}"
       shift 2 2>/dev/null || shift 1 2>/dev/null || true
+      ;;
+    --prune)
+      PRUNE_MODE=true
+      shift
       ;;
     *)
       shift
@@ -267,6 +273,72 @@ updated = len(agent_findings)
 if updated:
     print(f'Strengths/weaknesses updated for {updated} agents from findings file')
 " "$SCORES_FILE" "$FINDINGS_FILE" 2>/dev/null
+fi
+
+# ─── Prune Mode ───
+# If --prune is set, remove agent entries with >30 sessions or success_rate <0.2 with 10+ data points
+if [[ "$PRUNE_MODE" == "true" ]]; then
+  PRUNE_LOG="$SCRIPT_DIR/learning/prune-log.yaml"
+  python3 -c "
+import yaml, sys
+from datetime import date
+
+scores_file = sys.argv[1]
+prune_log_file = sys.argv[2]
+
+with open(scores_file) as f:
+    data = yaml.safe_load(f)
+
+data = data or {}
+agents = data.get('agents', {})
+pruned = []
+to_remove = []
+
+for name, info in agents.items():
+    sessions = info.get('sessions_completed', 0)
+    rate = info.get('success_rate', 1.0)
+    reason = None
+    if sessions > 30:
+        reason = f'exceeded 30 sessions ({sessions})'
+    elif sessions >= 10 and rate < 0.2:
+        reason = f'low success rate ({rate:.1%}) with {sessions} sessions'
+    if reason:
+        pruned.append({
+            'agent': name,
+            'date': str(date.today()),
+            'reason': reason,
+            'sessions': sessions,
+            'success_rate': float(rate)
+        })
+        to_remove.append(name)
+
+if to_remove:
+    for name in to_remove:
+        del agents[name]
+    data['agents'] = agents
+    with open(scores_file, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    # Append to prune log
+    try:
+        with open(prune_log_file) as f:
+            log_data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        log_data = {}
+
+    existing = log_data.get('pruned', [])
+    if existing is None:
+        existing = []
+    existing.extend(pruned)
+    log_data['pruned'] = existing
+
+    with open(prune_log_file, 'w') as f:
+        yaml.dump(log_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    print(f'Pruned {len(to_remove)} agents: {\", \".join(to_remove)}')
+else:
+    print('No agents meet prune criteria')
+" "$SCORES_FILE" "$PRUNE_LOG" 2>/dev/null
 fi
 
 echo "Agent scores updated: $UPDATED agents from session (outcome=$OUTCOME, cycle=$CYCLE)"
