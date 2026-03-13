@@ -233,6 +233,54 @@ SUMMARY:
 
 Categories: `correctness`, `security`, `testing`, `convention`, `performance`, `architecture`, `scope`
 
+## Regression Check
+
+If `artifacts/findings-ledger.md` exists from a previous review cycle, perform a regression check:
+
+1. Read the findings ledger and identify all findings with status `RESOLVED`.
+2. For each RESOLVED finding, verify it is still fixed in the current code:
+   - Read the file and line referenced in the finding.
+   - Check that the fix is still present and correct.
+3. If a RESOLVED finding has regressed (the original bug is back):
+   - Mark it as CRITICAL with the `[REGRESSION]` tag in your findings output.
+   - Reference the original finding ID (e.g., "F-003 [REGRESSION]: ...").
+4. Regressions are always CRITICAL, regardless of the original severity.
+5. Include a "Regression Summary" section in your output showing how many RESOLVED findings were checked and how many regressed.
+
+## Critique Mode
+
+When dispatched in **critique mode** by the orchestrator (for cross-agent critique), use a lightweight review process:
+
+- **max_turns**: 10 (reduced from normal 15)
+- **Focus**: Does this output match the spec? Are there obvious correctness issues?
+- **Scope**: Review only the output of the agent being critiqued, not the entire codebase.
+- **Do NOT** run full security audit patterns or cross-layer integration checks in critique mode.
+
+Write `artifacts/cross-critique.md` with structured findings:
+
+```markdown
+# Cross-Critique: [agent-name]
+
+## Spec Compliance
+- [REQ-1] Met: [YES/NO] -- [notes]
+- [REQ-2] Met: [YES/NO] -- [notes]
+
+## Findings
+### CRITICAL
+[category] file:line -- Description -> Suggested fix
+
+### MAJOR
+[category] file:line -- Description -> Suggested fix
+
+### MINOR
+[category] file:line -- Description -> Suggested fix
+
+## Verdict
+[PASS or FAIL -- FAIL if any CRITICAL or MAJOR finding]
+```
+
+CRITICAL findings from cross-critique are routed back to the original builder agent by the orchestrator.
+
 ## Rules
 
 1. **Be specific.** "This could be better" is worthless. "The switch at auth.ts:42 doesn't handle the 'expired' case" is actionable.

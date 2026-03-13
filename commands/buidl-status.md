@@ -30,7 +30,15 @@ Tokens used:  [tokens_used or "not tracked"]
 Elapsed:      [computed from started_at, or "unknown"]
 ```
 
-4. If there are review files in the session directory, show the latest verdict.
+4. **ABI Lock Status**: Check state for `abi_locked` and `abi_hash`:
+   ```
+   ABI Lock:       [locked (hash: abc123...) / unlocked]
+   ```
+5. **Findings Ledger Summary**: If `artifacts/findings-ledger.md` exists, parse it and show:
+   ```
+   Findings:       [N open / N resolved / N regression]
+   ```
+6. If there are review files in the session directory, show the latest verdict.
 5. If a checkpoint file exists at `.claude/loop/sessions/<name>/checkpoint.md`, show the last checkpoint timestamp and next action.
 6. If the status is `done`, `failed`, `cancelled`, or `timed_out`, include the summary.
 7. **Orphan worktree detection**: Run `git worktree list` and cross-reference with the active state:

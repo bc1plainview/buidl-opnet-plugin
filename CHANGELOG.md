@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.0.0] - 2026-03-13
+
+### Added
+- **Acceptance test generation** (`commands/buidl.md` Phase 2): After tasks.md is generated, the orchestrator extracts acceptance criteria from requirements.md and generates shell-script test stubs to `artifacts/acceptance-tests/`. Tests use pass()/fail()/check() convention and are included in the human approval gate. All 4 builder agents have a FORBIDDEN rule preventing modification of these locked tests.
+- **ABI-lock checkpoint** (`commands/buidl.md` Phase 4): After contract-dev completes, the orchestrator computes `shasum -a 256` of abi.json, stores the hash in state as `abi_hash` with `abi_locked=true`. Before frontend/backend dispatch, the hash is verified. Mismatch blocks dispatch and re-dispatches contract-dev.
+- **Adversarial auditor agent** (`agents/opnet-adversarial-auditor.md`): READ-ONLY agent that extracts invariants from requirements.md, reads contract source, constructs specific input sequences that could violate each invariant, and produces structured PASS/FAIL findings. FAIL verdict blocks deployment.
+- **Adversarial E2E tester agent** (`agents/opnet-adversarial-tester.md`): Sends real on-chain transactions targeting boundary values, revert exploitation, access control bypass, and race conditions. Runs after happy-path E2E tests, before UI testing.
+- **Structured failure diagnosis** (`commands/buidl.md` Phase 5): When max cycles reached with FAIL verdict, generates `artifacts/failure-diagnosis.md` with classification (spec_problem, implementation_problem, test_problem, infrastructure_problem), evidence, cycle history, and recommended next step.
+- **Findings ledger** (`commands/buidl.md` Phase 5): After each review, findings are assigned unique IDs (F-001, F-002...) and tracked in `artifacts/findings-ledger.md` with pipe-delimited table. Statuses: OPEN, RESOLVED, REGRESSION. For cycle 2+, reviewer checks resolved findings for regression.
+- **Chain probe script** (`scripts/chain-probe.sh`): Queries OPNet RPC for gas parameters, block height, and network. Writes to `artifacts/chain-state.json`. Handles RPC failure gracefully (probe_status: "failed", continues). Runs in Phase 2 for OPNet projects.
+- **Cross-agent critique** (`commands/buidl.md` Phase 4): After each builder completes, output is routed to a different agent for critique. Routing: contract-dev to loop-reviewer, frontend-dev to backend-dev (or reviewer), backend-dev to frontend-dev (or reviewer), loop-builder to loop-reviewer. CRITICAL findings route back to original builder.
+- **Critique mode** (`agents/loop-reviewer.md`): Lightweight review mode (max_turns 10) focused on spec compliance. Writes `artifacts/cross-critique.md`.
+- **Regression check** (`agents/loop-reviewer.md`): Reviewer reads findings-ledger.md, verifies RESOLVED findings are still fixed, marks regressions as CRITICAL with [REGRESSION] tag.
+- **Hard gate enforcement** (`commands/buidl.md` Phase 1): Gates 1-4 classified as SOFT, gates 5-6 as HARD. When --skip-challenge is set, soft gates are skipped (logged to trace), hard gates always run. Hard gate failure stops the loop.
+
+### Changed
+- **Self-critique replaced by cross-critique**: Removed Step 5.7 from opnet-contract-dev.md, Step 6.9 from opnet-frontend-dev.md, Step 4.7 from opnet-backend-dev.md, Step 3.7 from loop-builder.md. Cross-critique is handled by the orchestrator after each builder completes.
+- **Builder agents FORBIDDEN sections**: All 4 builder agents now include a rule preventing modification of files in `artifacts/acceptance-tests/`.
+- **Agent dispatch table**: Added adversarial auditor (max_turns: 20), adversarial E2E tester (max_turns: 25), and reviewer critique mode (max_turns: 10).
+- **Hook scripts**: stop-hook.sh, guard-state.sh, and guard-state-bash.sh now include `adversarial_auditing` and `adversarial_testing` in active phase lists.
+- **buidl-status**: Shows ABI-lock status (locked/unlocked with hash) and findings ledger summary (open/resolved/regression counts).
+- **Plugin version**: 4.0.0 -> 5.0.0
+
+### Why
+Nine correctness, reliability, and coverage gaps identified in an external audit. (1) Acceptance tests can now be locked before building, preventing builders from modifying the verification criteria. (2) ABI-lock prevents frontend/backend drift from the contract ABI. (3) Adversarial auditing tests invariants with attack sequences, not just pattern matching. (4) Adversarial E2E testing sends real edge-case transactions that happy-path tests miss. (5) Failure diagnosis classifies root causes when the loop exhausts its cycle budget. (6) Findings ledger tracks resolution and detects regressions across cycles. (7) Chain probe fetches live gas parameters before spec generation. (8) Cross-agent critique replaces self-critique with independent verification. (9) Hard gate enforcement ensures critical gates cannot be skipped.
+
 ## [4.0.0] - 2026-03-13
 
 ### Added
