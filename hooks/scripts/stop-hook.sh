@@ -54,7 +54,7 @@ fi
 
 # Only block exit during active loop phases
 case "$STATUS" in
-  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing)
+  challenging|specifying|exploring|building|reviewing|auditing|deploying|testing|e2e_testing)
     ;;
   *)
     # Not in an active loop phase — allow exit
@@ -87,6 +87,56 @@ if [[ -n "$STARTED_AT" ]]; then
 fi
 
 SESSION_DIR="$PROJECT_DIR/.claude/loop/sessions/$SESSION_NAME"
+
+# ── E2E Testing Gate ──
+# If this is an OPNet project with a deployed contract, E2E testing MUST complete
+# before the loop can transition to review. This is the hard enforcement.
+DEPLOYMENT_ADDR=$(grep '^deployment_address:' "$STATE_FILE" | head -1 | awk '{print $2}' || true)
+E2E_RESULTS="$SESSION_DIR/artifacts/testing/e2e-results.json"
+
+if [[ "$PROJECT_TYPE" == "opnet" && -n "$DEPLOYMENT_ADDR" && "$DEPLOYMENT_ADDR" != '""' ]]; then
+  if [[ ! -f "$E2E_RESULTS" ]]; then
+    # E2E tests haven't run yet — block and re-inject E2E testing prompt
+    E2E_HANDOFF="$SESSION_DIR/artifacts/deployment/e2e-handoff.json"
+    HANDOFF_CONTEXT=""
+    if [[ -f "$E2E_HANDOFF" ]]; then
+      HANDOFF_CONTEXT="E2E handoff data is at: $E2E_HANDOFF"
+    fi
+
+    E2E_PROMPT="E2E TESTING GATE: Contract deployed at $DEPLOYMENT_ADDR but on-chain E2E tests have NOT run yet.
+
+This is a HARD GATE — you CANNOT proceed to review until E2E tests complete.
+
+$HANDOFF_CONTEXT
+
+Launch the opnet-e2e-tester agent NOW with:
+- Contract address: $DEPLOYMENT_ADDR
+- ABI: $SESSION_DIR/artifacts/contract/abi.json
+- Deployment receipt: $SESSION_DIR/artifacts/deployment/receipt.json
+- Spec: $SESSION_DIR/spec/
+
+After E2E tests pass, write results to: $SESSION_DIR/artifacts/testing/e2e-results.json
+Then proceed to UI testing and review."
+
+    JSON_E2E=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" <<< "$E2E_PROMPT")
+    echo "{\"decision\": \"block\", \"reason\": $JSON_E2E}" >&2
+    exit 2
+  fi
+
+  # E2E results exist — check if they passed (allowlist "pass", block everything else)
+  E2E_STATUS=$(python3 -c "import json; print(json.load(open('$E2E_RESULTS')).get('status','unknown'))" 2>/dev/null || echo "unknown")
+  if [[ "$E2E_STATUS" != "pass" ]]; then
+    E2E_FAIL_PROMPT="E2E TESTING FAILED. On-chain tests found real bugs in the deployed contract.
+
+Review the failures in: $E2E_RESULTS
+Route contract bugs to opnet-contract-dev for fixes, then re-deploy and re-run E2E tests.
+
+This gate blocks review until E2E tests pass."
+    JSON_E2E_FAIL=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" <<< "$E2E_FAIL_PROMPT")
+    echo "{\"decision\": \"block\", \"reason\": $JSON_E2E_FAIL}" >&2
+    exit 2
+  fi
+fi
 
 # Check for reviewer verdict in the latest review file
 LATEST_REVIEW=""

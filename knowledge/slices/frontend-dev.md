@@ -948,6 +948,88 @@ const sim = await motoContract.increaseAllowance(spenderAddress, amount);
 
 ---
 
+## Common Runtime Errors (Compilation Passes, Runtime Breaks)
+
+These errors are invisible to `lint`, `typecheck`, and `build` — they only appear when the frontend runs in a browser. Learn them to avoid wasting fix cycles.
+
+### RT-1: Missing Node.js Polyfills (White Page)
+```
+Uncaught ReferenceError: Buffer is not defined
+Uncaught ReferenceError: process is not defined
+Uncaught ReferenceError: global is not defined
+```
+**Cause:** OPNet packages depend on Node.js globals. Vite doesn't polyfill them by default.
+**Prevention:** Use the exact `vite.config.ts` from this knowledge slice. The `vite-plugin-node-polyfills` plugin with `Buffer: true, global: true, process: true` is mandatory. Never remove or modify the polyfills config.
+
+### RT-2: undici / fetch Shim Missing (RPC Calls Fail)
+```
+TypeError: Cannot read properties of undefined (reading 'Request')
+Error: fetch is not defined
+```
+**Cause:** `opnet` uses Node.js `undici` for HTTP. In browser, it needs a shim.
+**Prevention:** Add `undici: resolve(__dirname, 'node_modules/opnet/src/fetch/fetch-browser.js')` to `resolve.alias` in vite.config.ts. This is in the standard config — do not remove it.
+
+### RT-3: Duplicate Package Instances (Subtle Crypto Failures)
+```
+Error: Invalid point on curve
+Error: Expected Uint8Array of length 32
+```
+**Cause:** Multiple versions of `@noble/curves` or `@noble/hashes` loaded. Signing produces wrong output.
+**Prevention:** Add `dedupe: ['@noble/curves', '@noble/hashes', '@scure/base']` to `resolve` in vite.config.ts. Add `"overrides": {"@noble/hashes": "2.0.1"}` to package.json.
+
+### RT-4: CORS Errors on RPC (Blocked by Browser)
+```
+Access to fetch has been blocked by CORS policy
+```
+**Cause:** Direct RPC calls from browser to a node that doesn't set CORS headers.
+**Prevention:** Use the official OPNet RPC URLs (`https://testnet.opnet.org`, `https://mainnet.opnet.org`) — they have CORS configured. Never use custom/local RPC URLs without a proxy.
+
+### RT-5: React Hydration Mismatch (SSR or Strict Mode)
+```
+Warning: Text content did not match. Server: "..." Client: "..."
+Uncaught Error: Hydration failed
+```
+**Cause:** Server-rendered HTML differs from client render. Common with wallet state (connected/disconnected) or dynamic values.
+**Prevention:** For wallet-dependent UI, render a loading/skeleton state initially and update after `useEffect`. Never render wallet-specific content during initial render. Wrap dynamic content in `{typeof window !== 'undefined' && ...}` if needed.
+
+### RT-6: BigInt Serialization Error (JSON.stringify fails)
+```
+TypeError: Do not know how to serialize a BigInt
+```
+**Cause:** `JSON.stringify()` cannot handle `bigint` values. Common when logging contract call results.
+**Prevention:** Never pass raw contract results to `JSON.stringify()`. Convert bigint to string first: `value.toString()`. Or use a replacer: `JSON.stringify(obj, (_, v) => typeof v === 'bigint' ? v.toString() : v)`.
+
+### RT-7: WalletConnect Modal Renders at Page Bottom (Not Centered)
+```
+[Visual bug — WC modal appears below page fold instead of centered overlay]
+```
+**Cause:** Default WalletConnect CSS doesn't work well with all layouts.
+**Prevention:** Add the `wcm-modal` CSS fix from this knowledge slice (position: fixed, z-index: 9999, flex centering). Include it in your global CSS file.
+
+### RT-8: Vite Dev Server Crashes on Node.js Module Import
+```
+[vite] Internal server error: Failed to resolve import "node:crypto"
+[vite] Internal server error: "worker_threads" is not exported by "..."
+```
+**Cause:** OPNet packages import Node.js-only modules that Vite can't resolve.
+**Prevention:** Add these to `build.rollupOptions.external`: `['worker_threads', 'node:sqlite', 'node:diagnostics_channel', 'node:async_hooks', 'node:perf_hooks', 'node:worker_threads']`. Also add `exclude: ['@btc-vision/transaction', 'crypto-browserify']` to `optimizeDeps`.
+
+### RT-9: CSS Custom Properties Undefined (Variables Render as Empty)
+```
+[Visual bug — colors missing, transparent backgrounds, invisible text]
+```
+**Cause:** CSS custom properties referenced in components but never defined in `:root`.
+**Prevention:** Always define all `--color-*`, `--spacing-*`, `--radius-*` variables in `:root` in your main CSS file BEFORE using them in components. Test by inspecting computed styles in DevTools.
+
+### RT-10: Wallet Connect But No Contract Interaction (Silent Failure)
+```
+[Functional bug — wallet connects but contract calls return undefined/null]
+```
+**Cause:** `getContract()` called with wrong params (missing sender, wrong network, wrong ABI format).
+**Prevention:** Always use all 5 params. Always build sender with `Address.fromString(hashedMLDSAKey, publicKey)` from WalletConnect. Always use `networks.opnetTestnet` (not `networks.testnet`). Always merge your ABI with `OP_NET_ABI` or `OP_20_ABI`.
+
+---
+
 ## Code Verification Order (MANDATORY)
 
 ```bash

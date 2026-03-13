@@ -149,7 +149,118 @@ If any step fails:
 - Change one variable at a time. Re-run after each change.
 - After 3 failures on the same issue: complete the 7-Point Checklist from PUA.
 
-### Step 6.5: Proactivity Check (MANDATORY after pipeline passes)
+### Step 6.5: Runtime Smoke Check (MANDATORY — catches bugs that lint/typecheck/build miss)
+
+After build passes, you MUST verify the frontend actually works at runtime. This step catches console errors, rendering failures, and design violations that static analysis cannot detect.
+
+**Do NOT skip this step. If you declare success without running the smoke check, the UI tester will find these bugs later and waste an entire fix cycle.**
+
+```bash
+# 1. Install Playwright if not present
+npm install -D @playwright/test 2>/dev/null
+npx playwright install chromium 2>/dev/null
+
+# 2. Start dev server in background (with trap for cleanup)
+npx vite --port 5173 &
+DEV_PID=$!
+trap 'kill $DEV_PID 2>/dev/null' EXIT
+for i in $(seq 1 30); do curl -s http://localhost:5173 >/dev/null 2>&1 && break; sleep 1; done
+
+# 3. Run the smoke check (inline script)
+node -e "
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+
+  await page.goto('http://localhost:5173', { waitUntil: 'networkidle', timeout: 30000 });
+
+  // Check 1: No console errors (filter favicon and DevTools noise)
+  const realErrors = errors.filter(e => !e.includes('favicon') && !e.includes('DevTools'));
+  if (realErrors.length > 0) {
+    console.error('SMOKE FAIL: Console errors found:');
+    realErrors.forEach(e => console.error('  -', e));
+    process.exit(1);
+  }
+
+  // Check 2: Dark background (not white)
+  const bgColor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const rgb = bgColor.match(/\d+/g)?.map(Number) ?? [255,255,255];
+  const luminance = (0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2]) / 255;
+  if (luminance > 0.3) {
+    console.error('SMOKE FAIL: Background is too light:', bgColor);
+    process.exit(1);
+  }
+
+  // Check 3: Page has visible content (not blank)
+  const hasContent = await page.evaluate(() => document.body.innerText.trim().length > 0);
+  if (!hasContent) {
+    console.error('SMOKE FAIL: Page has no visible text content');
+    process.exit(1);
+  }
+
+  console.log('SMOKE PASS: No console errors, dark background, content renders');
+  await browser.close();
+})().catch(e => { console.error('SMOKE FAIL:', e.message); process.exit(1); });
+"
+
+# 4. Kill dev server
+kill $DEV_PID 2>/dev/null
+```
+
+If the smoke check fails:
+1. Read the error output. Form a hypothesis.
+2. Fix the issue (one variable at a time).
+3. Re-run build + smoke check.
+4. After 3 failures: complete the 7-Point Checklist from PUA.
+
+### Step 6.7: Pre-Flight Checklist (MANDATORY — grep your own code for known anti-patterns)
+
+Before writing build-result.json, scan your own source code for the top 10 anti-patterns that cause production bugs. This takes seconds and prevents the most common reviewer/UI tester findings.
+
+Run these checks against `src/`:
+
+```bash
+# 1. Buffer usage (FORBIDDEN — use Uint8Array + BufferHelper)
+grep -rn "Buffer\.from\|Buffer\.alloc\|Buffer\.concat\|Buffer\.isBuffer\|new Buffer" src/ && echo "FAIL: Buffer usage found" && exit 1
+
+# 2. Private key leak (signer !== null on frontend)
+grep -rn "signer:" src/ | grep -v "null" | grep -v "//" && echo "FAIL: signer is not null" && exit 1
+
+# 3. Wrong network (networks.testnet instead of networks.opnetTestnet)
+grep -rn "networks\.testnet" src/ | grep -v "opnetTestnet" && echo "FAIL: Wrong network" && exit 1
+
+# 4. Forbidden approve() (use increaseAllowance)
+grep -rn "\.approve(" src/ && echo "FAIL: approve() used — use increaseAllowance()" && exit 1
+
+# 5. Spinners (should be skeleton loaders)
+grep -rni "spinner" src/ && echo "FAIL: Spinner found — use skeleton loader" && exit 1
+
+# 6. Emojis in source
+grep -Prn '[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}]' src/ && echo "FAIL: Emoji found" && exit 1
+
+# 7. Hardcoded colors (hex in CSS, not in :root)
+grep -rn "color:.*#[0-9a-fA-F]" src/ | grep -v ":root" | grep -v "var(" && echo "WARNING: Hardcoded color found"
+
+# 8. Missing meta tags
+grep -c "<title>" index.html || echo "FAIL: Missing <title> tag"
+grep -c "og:title" index.html || echo "WARNING: Missing Open Graph tags"
+
+# 9. Static feeRate
+grep -rn "feeRate:" src/ | grep -v "gasParameters" | grep -v "//" | grep "[0-9]" && echo "WARNING: Static feeRate found"
+
+# 10. Missing explorer links
+grep -rn "mempool.opnet.org" src/ || echo "WARNING: No mempool explorer links found"
+grep -rn "opscan.org" src/ || echo "WARNING: No OPScan explorer links found"
+```
+
+**FAIL items block build-result. WARNING items are logged but don't block.**
+
+If any FAIL item is found: fix it, re-run build, re-run smoke check, re-run pre-flight. Do NOT write build-result.json until all FAILs are cleared.
+
+### Step 6.8: Proactivity Check (MANDATORY after all checks pass)
 - [ ] Verified the fix with actual execution?
 - [ ] Checked for similar issues in the same file/module?
 - [ ] Upstream/downstream dependencies affected?
