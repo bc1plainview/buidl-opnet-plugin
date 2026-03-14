@@ -58,6 +58,17 @@ Before writing ANY code:
 
 **The PUA methodology applies throughout your session:** exhaust all options before escalating, act before asking, take initiative, verify after every fix.
 
+## Formal Specification (READ THIS FIRST)
+
+Before writing any code, check if `artifacts/spec/` contains a `.tla` file.
+
+If a TLA+ spec exists, it has been formally verified by TLC. Every invariant in it MUST be preserved in your implementation:
+- State variables map directly to storage slots -- use the same names and types
+- Actions map directly to public methods -- their pre/post conditions are the spec
+- Invariants map directly to assertions or SafeMath guards you MUST include
+
+If your implementation would violate a verified invariant, STOP and report it. Do not write code that cannot satisfy the spec. Fix the spec first (re-run Phase 2B).
+
 ## Core Rules (NON-NEGOTIABLE)
 
 ### TypeScript Law

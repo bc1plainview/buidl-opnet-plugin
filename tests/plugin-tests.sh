@@ -1810,24 +1810,24 @@ fi
 rm -rf "$QUERY_TMPDIR"
 
 # ─────────────────────────────────────────────────
-# Version 7.0.0 Consistency
+# Version 8.0.0 Consistency
 # ─────────────────────────────────────────────────
 echo ""
-echo "=== Version 7.0.0 ==="
+echo "=== Version 8.0.0 ==="
 
 V7_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null)
 V7_CHANGELOG=$(head -5 CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
 
-if [[ "$V7_PLUGIN" == "7.0.0" ]]; then
-  pass "v7-plugin-json-version: plugin.json version is 7.0.0"
+if [[ "$V7_PLUGIN" == "8.0.0" ]]; then
+  pass "v7-plugin-json-version: plugin.json version is 8.0.0"
 else
-  fail "v7-plugin-json-version: plugin.json version is NOT 7.0.0 (got: $V7_PLUGIN)"
+  fail "v7-plugin-json-version: plugin.json version is NOT 8.0.0 (got: $V7_PLUGIN)"
 fi
 
-if [[ "$V7_CHANGELOG" == "7.0.0" ]]; then
-  pass "v7-changelog-first-entry: CHANGELOG first entry is 7.0.0"
+if [[ "$V7_CHANGELOG" == "8.0.0" ]]; then
+  pass "v7-changelog-first-entry: CHANGELOG first entry is 8.0.0"
 else
-  fail "v7-changelog-first-entry: CHANGELOG first entry is NOT 7.0.0 (got: $V7_CHANGELOG)"
+  fail "v7-changelog-first-entry: CHANGELOG first entry is NOT 8.0.0 (got: $V7_CHANGELOG)"
 fi
 
 if [[ "$V7_PLUGIN" == "$V7_CHANGELOG" ]]; then
@@ -3637,6 +3637,375 @@ if grep -q 'Repo Map' README.md; then
   pass "v7-readme-repomap-feature: README.md mentions repo map feature"
 else
   fail "v7-readme-repomap-feature: README.md does NOT mention repo map feature"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-1: TLA+ Setup Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== TLA+ Setup Script ==="
+
+if [[ -f scripts/setup-tla.sh ]]; then
+  pass "v8-tla-setup-exists: scripts/setup-tla.sh exists"
+else
+  fail "v8-tla-setup-exists: scripts/setup-tla.sh NOT found"
+fi
+
+if [[ -x scripts/setup-tla.sh ]]; then
+  pass "v8-tla-setup-executable: scripts/setup-tla.sh is executable"
+else
+  fail "v8-tla-setup-executable: scripts/setup-tla.sh is NOT executable"
+fi
+
+check "v8-tla-setup-syntax: setup-tla.sh passes bash -n" bash -n scripts/setup-tla.sh
+
+if grep -q 'tla2tools.jar' scripts/setup-tla.sh; then
+  pass "v8-tla-setup-downloads-jar: setup-tla.sh downloads tla2tools.jar"
+else
+  fail "v8-tla-setup-downloads-jar: setup-tla.sh does NOT reference tla2tools.jar"
+fi
+
+if grep -q 'java' scripts/setup-tla.sh; then
+  pass "v8-tla-setup-checks-java: setup-tla.sh checks for Java"
+else
+  fail "v8-tla-setup-checks-java: setup-tla.sh does NOT check for Java"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-2: TLA+ Verify Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== TLA+ Verify Script ==="
+
+if [[ -f scripts/verify-spec.sh ]]; then
+  pass "v8-tla-verify-exists: scripts/verify-spec.sh exists"
+else
+  fail "v8-tla-verify-exists: scripts/verify-spec.sh NOT found"
+fi
+
+if [[ -x scripts/verify-spec.sh ]]; then
+  pass "v8-tla-verify-executable: scripts/verify-spec.sh is executable"
+else
+  fail "v8-tla-verify-executable: scripts/verify-spec.sh is NOT executable"
+fi
+
+check "v8-tla-verify-syntax: verify-spec.sh passes bash -n" bash -n scripts/verify-spec.sh
+
+if grep -q 'verification-result.json' scripts/verify-spec.sh; then
+  pass "v8-tla-verify-outputs-json: verify-spec.sh outputs verification-result.json"
+else
+  fail "v8-tla-verify-outputs-json: verify-spec.sh does NOT output verification-result.json"
+fi
+
+if grep -q 'set -euo pipefail' scripts/verify-spec.sh; then
+  pass "v8-tla-verify-pipefail: verify-spec.sh has set -euo pipefail"
+else
+  fail "v8-tla-verify-pipefail: verify-spec.sh MISSING set -euo pipefail"
+fi
+
+if grep -q 'SCRIPT_DIR' scripts/verify-spec.sh; then
+  pass "v8-tla-verify-scriptdir: verify-spec.sh has SCRIPT_DIR"
+else
+  fail "v8-tla-verify-scriptdir: verify-spec.sh MISSING SCRIPT_DIR"
+fi
+
+if grep -q '\-deadlock' scripts/verify-spec.sh; then
+  pass "v8-tla-verify-deadlock-flag: verify-spec.sh uses -deadlock flag"
+else
+  fail "v8-tla-verify-deadlock-flag: verify-spec.sh MISSING -deadlock flag"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-3: TLC Output Parser
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== TLC Output Parser ==="
+
+if [[ -f scripts/parse-tlc-output.py ]]; then
+  pass "v8-tla-parser-exists: scripts/parse-tlc-output.py exists"
+else
+  fail "v8-tla-parser-exists: scripts/parse-tlc-output.py NOT found"
+fi
+
+check "v8-tla-parser-syntax: parse-tlc-output.py passes python3 -m py_compile" python3 -m py_compile scripts/parse-tlc-output.py
+
+if grep -q 'states_checked' scripts/parse-tlc-output.py; then
+  pass "v8-tla-parser-states: parse-tlc-output.py tracks states_checked"
+else
+  fail "v8-tla-parser-states: parse-tlc-output.py does NOT track states_checked"
+fi
+
+if grep -q 'violations' scripts/parse-tlc-output.py; then
+  pass "v8-tla-parser-violations: parse-tlc-output.py tracks violations"
+else
+  fail "v8-tla-parser-violations: parse-tlc-output.py does NOT track violations"
+fi
+
+# Functional test: parse empty TLC output
+PARSER_OUT=$(python3 scripts/parse-tlc-output.py "" "0" 2>/dev/null || true)
+if echo "$PARSER_OUT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='pass'" 2>/dev/null; then
+  pass "v8-tla-parser-func-empty: parse-tlc-output.py returns pass for empty input"
+else
+  fail "v8-tla-parser-func-empty: parse-tlc-output.py does NOT return pass for empty input"
+fi
+
+# Functional test: parse violation output
+VIOLATION_INPUT="Invariant BalanceNeverNegative is violated.
+State 1: balance = -50
+12847 states generated"
+PARSER_VIOLATION=$(python3 scripts/parse-tlc-output.py "$VIOLATION_INPUT" "100" 2>/dev/null || true)
+if echo "$PARSER_VIOLATION" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='fail' and d['states_checked']==12847 and len(d['violations'])==1" 2>/dev/null; then
+  pass "v8-tla-parser-func-violation: parse-tlc-output.py correctly parses violations"
+else
+  fail "v8-tla-parser-func-violation: parse-tlc-output.py does NOT correctly parse violations"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-4: TLA+ Spec Loop Script
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== TLA+ Spec Loop Script ==="
+
+if [[ -f scripts/run-spec-loop.sh ]]; then
+  pass "v8-tla-loop-exists: scripts/run-spec-loop.sh exists"
+else
+  fail "v8-tla-loop-exists: scripts/run-spec-loop.sh NOT found"
+fi
+
+if [[ -x scripts/run-spec-loop.sh ]]; then
+  pass "v8-tla-loop-executable: scripts/run-spec-loop.sh is executable"
+else
+  fail "v8-tla-loop-executable: scripts/run-spec-loop.sh is NOT executable"
+fi
+
+check "v8-tla-loop-syntax: run-spec-loop.sh passes bash -n" bash -n scripts/run-spec-loop.sh
+
+if grep -q 'repair-signal.json' scripts/run-spec-loop.sh; then
+  pass "v8-tla-loop-repair-signal: run-spec-loop.sh creates repair-signal.json"
+else
+  fail "v8-tla-loop-repair-signal: run-spec-loop.sh does NOT create repair-signal.json"
+fi
+
+if grep -q 'loop-log.md' scripts/run-spec-loop.sh; then
+  pass "v8-tla-loop-log: run-spec-loop.sh writes loop-log.md"
+else
+  fail "v8-tla-loop-log: run-spec-loop.sh does NOT write loop-log.md"
+fi
+
+if grep -q 'set -euo pipefail' scripts/run-spec-loop.sh; then
+  pass "v8-tla-loop-pipefail: run-spec-loop.sh has set -euo pipefail"
+else
+  fail "v8-tla-loop-pipefail: run-spec-loop.sh MISSING set -euo pipefail"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-5: Spec Writer Agent
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Spec Writer Agent ==="
+
+if [[ -f agents/spec-writer.md ]]; then
+  pass "v8-spec-writer-exists: agents/spec-writer.md exists"
+else
+  fail "v8-spec-writer-exists: agents/spec-writer.md NOT found"
+fi
+
+if grep -q 'partial revert' agents/spec-writer.md; then
+  pass "v8-spec-writer-partial-revert: spec-writer covers partial revert"
+else
+  fail "v8-spec-writer-partial-revert: spec-writer does NOT cover partial revert"
+fi
+
+if grep -q 'NativeSwap' agents/spec-writer.md; then
+  pass "v8-spec-writer-nativeswap: spec-writer covers NativeSwap"
+else
+  fail "v8-spec-writer-nativeswap: spec-writer does NOT cover NativeSwap"
+fi
+
+if grep -q 'BalanceConservation' agents/spec-writer.md; then
+  pass "v8-spec-writer-balance-conservation: spec-writer covers BalanceConservation"
+else
+  fail "v8-spec-writer-balance-conservation: spec-writer does NOT cover BalanceConservation"
+fi
+
+if grep -q 'TypeInvariant' agents/spec-writer.md; then
+  pass "v8-spec-writer-type-invariant: spec-writer covers TypeInvariant"
+else
+  fail "v8-spec-writer-type-invariant: spec-writer does NOT cover TypeInvariant"
+fi
+
+if grep -q 'NoNegativeBalance' agents/spec-writer.md; then
+  pass "v8-spec-writer-no-negative: spec-writer covers NoNegativeBalance"
+else
+  fail "v8-spec-writer-no-negative: spec-writer does NOT cover NoNegativeBalance"
+fi
+
+if grep -q 'AccessControlInvariant' agents/spec-writer.md; then
+  pass "v8-spec-writer-access-control: spec-writer covers AccessControlInvariant"
+else
+  fail "v8-spec-writer-access-control: spec-writer does NOT cover AccessControlInvariant"
+fi
+
+if grep -q 'FORBIDDEN.*removing invariants' agents/spec-writer.md; then
+  pass "v8-spec-writer-no-remove-invariants: spec-writer forbids removing invariants"
+else
+  fail "v8-spec-writer-no-remove-invariants: spec-writer does NOT forbid removing invariants"
+fi
+
+if grep -q 'artifacts/spec' agents/spec-writer.md; then
+  pass "v8-spec-writer-artifacts-path: spec-writer references artifacts/spec"
+else
+  fail "v8-spec-writer-artifacts-path: spec-writer does NOT reference artifacts/spec"
+fi
+
+if grep -q '\.cfg' agents/spec-writer.md; then
+  pass "v8-spec-writer-cfg-file: spec-writer generates .cfg file"
+else
+  fail "v8-spec-writer-cfg-file: spec-writer does NOT generate .cfg file"
+fi
+
+# Check YAML frontmatter
+if grep -q '^name: spec-writer' agents/spec-writer.md; then
+  pass "v8-spec-writer-frontmatter-name: spec-writer has name in frontmatter"
+else
+  fail "v8-spec-writer-frontmatter-name: spec-writer MISSING name in frontmatter"
+fi
+
+if grep -q '^model:' agents/spec-writer.md; then
+  pass "v8-spec-writer-frontmatter-model: spec-writer has model in frontmatter"
+else
+  fail "v8-spec-writer-frontmatter-model: spec-writer MISSING model in frontmatter"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-6: buidl.md Phase 2B Integration
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== buidl.md Phase 2B ==="
+
+if grep -q 'Phase 2B' commands/buidl.md; then
+  pass "v8-buidl-phase2b: buidl.md contains Phase 2B"
+else
+  fail "v8-buidl-phase2b: buidl.md does NOT contain Phase 2B"
+fi
+
+if grep -q 'run-spec-loop.sh' commands/buidl.md; then
+  pass "v8-buidl-spec-loop-ref: buidl.md references run-spec-loop.sh"
+else
+  fail "v8-buidl-spec-loop-ref: buidl.md does NOT reference run-spec-loop.sh"
+fi
+
+if grep -q 'BLOCK Phase 3' commands/buidl.md; then
+  pass "v8-buidl-block-phase3: buidl.md blocks Phase 3 on failed spec"
+else
+  fail "v8-buidl-block-phase3: buidl.md does NOT block Phase 3 on failed spec"
+fi
+
+if grep -q 'setup-tla.sh' commands/buidl.md; then
+  pass "v8-buidl-setup-tla-ref: buidl.md references setup-tla.sh"
+else
+  fail "v8-buidl-setup-tla-ref: buidl.md does NOT reference setup-tla.sh"
+fi
+
+if grep -q 'spec-writer' commands/buidl.md; then
+  pass "v8-buidl-spec-writer-ref: buidl.md references spec-writer agent"
+else
+  fail "v8-buidl-spec-writer-ref: buidl.md does NOT reference spec-writer agent"
+fi
+
+if grep -q 'repair-signal.json' commands/buidl.md; then
+  pass "v8-buidl-repair-signal-ref: buidl.md references repair-signal.json"
+else
+  fail "v8-buidl-repair-signal-ref: buidl.md does NOT reference repair-signal.json"
+fi
+
+if grep -q 'FORBIDDEN.*removing invariants' commands/buidl.md; then
+  pass "v8-buidl-no-remove-invariants: buidl.md forbids removing invariants"
+else
+  fail "v8-buidl-no-remove-invariants: buidl.md does NOT forbid removing invariants"
+fi
+
+# Check spec-writer in max_turns table
+if grep -q 'Spec Writers.*15' commands/buidl.md; then
+  pass "v8-buidl-spec-writer-turns: buidl.md has spec-writer max_turns=15"
+else
+  fail "v8-buidl-spec-writer-turns: buidl.md MISSING spec-writer in max_turns table"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-7: Contract Dev Spec Reference
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== Contract Dev Spec Reference ==="
+
+if grep -q 'artifacts/spec' agents/opnet-contract-dev.md; then
+  pass "v8-contract-dev-spec-ref: opnet-contract-dev.md references artifacts/spec"
+else
+  fail "v8-contract-dev-spec-ref: opnet-contract-dev.md does NOT reference artifacts/spec"
+fi
+
+if grep -q 'formally verified' agents/opnet-contract-dev.md; then
+  pass "v8-contract-dev-formally-verified: opnet-contract-dev.md mentions formally verified"
+else
+  fail "v8-contract-dev-formally-verified: opnet-contract-dev.md does NOT mention formally verified"
+fi
+
+if grep -q 'Phase 2B' agents/opnet-contract-dev.md; then
+  pass "v8-contract-dev-phase2b-ref: opnet-contract-dev.md references Phase 2B"
+else
+  fail "v8-contract-dev-phase2b-ref: opnet-contract-dev.md does NOT reference Phase 2B"
+fi
+
+if grep -q '\.tla' agents/opnet-contract-dev.md; then
+  pass "v8-contract-dev-tla-ref: opnet-contract-dev.md references .tla files"
+else
+  fail "v8-contract-dev-tla-ref: opnet-contract-dev.md does NOT reference .tla files"
+fi
+
+# ─────────────────────────────────────────────────
+# v8 TEST-8: .gitignore and Version
+# ─────────────────────────────────────────────────
+echo ""
+echo "=== v8 .gitignore and Version ==="
+
+if grep -q 'tools/tla' .gitignore; then
+  pass "v8-gitignore-tla: .gitignore has tools/tla/"
+else
+  fail "v8-gitignore-tla: .gitignore MISSING tools/tla/"
+fi
+
+V8_PLUGIN=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null || true)
+if [[ "$V8_PLUGIN" == "8.0.0" ]]; then
+  pass "v8-plugin-json-version: plugin.json version is 8.0.0"
+else
+  fail "v8-plugin-json-version: plugin.json version is NOT 8.0.0 (got: $V8_PLUGIN)"
+fi
+
+if grep -q '\[8.0.0\]' CHANGELOG.md; then
+  pass "v8-changelog-entry: CHANGELOG.md has [8.0.0] entry"
+else
+  fail "v8-changelog-entry: CHANGELOG.md missing [8.0.0] entry"
+fi
+
+# 8.0.0 should come before 7.0.0
+V8_CL_LINE=$(grep -n '\[8.0.0\]' CHANGELOG.md | head -1 | cut -d: -f1 || true)
+V7_CL_LINE=$(grep -n '\[7.0.0\]' CHANGELOG.md | head -1 | cut -d: -f1 || true)
+if [[ -n "$V8_CL_LINE" && -n "$V7_CL_LINE" && "$V8_CL_LINE" -lt "$V7_CL_LINE" ]]; then
+  pass "v8-changelog-order: [8.0.0] comes before [7.0.0] in CHANGELOG"
+else
+  fail "v8-changelog-order: [8.0.0] does NOT come before [7.0.0] in CHANGELOG"
+fi
+
+if grep -q 'v8.0.0' README.md; then
+  pass "v8-readme-version-history: README.md has v8.0.0 in version history"
+else
+  fail "v8-readme-version-history: README.md missing v8.0.0 in version history"
+fi
+
+if grep -qi 'TLA+\|formal.*spec\|formal.*verif' README.md; then
+  pass "v8-readme-tla-feature: README.md mentions TLA+ or formal specification feature"
+else
+  fail "v8-readme-tla-feature: README.md does NOT mention TLA+ feature"
 fi
 
 # ─────────────────────────────────────────────────

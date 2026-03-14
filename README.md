@@ -159,6 +159,9 @@ When agents fail, repair follows three targeted phases instead of blindly re-run
 #### Autoresearch Optimize Mode
 `/buidl-optimize gas` runs an automated optimization loop: hypothesize, implement, benchmark, keep/revert. Supports gas, bundle_size, test_time, and throughput metrics. Default 10 cycles. No test regressions allowed. Produces a summary and auto-creates a PR with kept changes.
 
+#### TLA+ Formal Specification (Phase 2B)
+Before any contract code is generated, a `spec-writer` agent produces a TLA+ formal specification of the contract's state machine. TLC exhaustively verifies every invariant — balance conservation, no negative balances, access control, partial revert consistency. If violations are found, the agent repairs the spec in a feedback loop. If the spec cannot be verified after 5 iterations, codegen is blocked entirely. Catches design-level race conditions and state conflicts that unit tests and mutation testing can never find.
+
 #### Dynamic Re-Planning
 When an agent fails after retry, the orchestrator queries `learning/patterns.yaml` for known fix patterns matching the failure category. If a match is found, it presents a 5th option ("Apply known fix: [description]") alongside the standard 4 error-handling options. Lessons from past sessions are applied automatically instead of requiring manual intervention.
 
@@ -368,6 +371,9 @@ Tests run automatically on every push and PR via GitHub Actions.
 ---
 
 ## Version History
+
+### v8.0.0 — TLA+ Formal Verification (2026-03-14)
+Design-level bug elimination: **TLA+ formal specification** generates a state machine model from requirements, TLC model checker exhaustively verifies every invariant (balance conservation, access control, partial revert consistency), and a spec-writer agent loops fixing violations before any contract code is generated. Catches race conditions, state conflicts, and ordering bugs that tests can never find.
 
 ### v7.0.0 — Mutation + Repair + Scoring (2026-03-13)
 Four verification and repair improvements: **Mutation testing gate** applies 20 operators to contract source, requiring >= 70% kill rate before review. **Structured repair phases** (R1/R2/R3) localize failures, generate targeted patches, and validate automatically. **Goal-oriented build evaluation** scores builds across 4 dimensions (spec coverage, security, mutation, code health) with routing for each failed dimension. **Hierarchical repo map** provides cross-layer visibility from ABI to frontend/backend calls. Plus **autoresearch optimize mode** for automated metric improvement.

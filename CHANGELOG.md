@@ -1,5 +1,24 @@
 # Changelog
 
+## [8.0.0] - 2026-03-14
+
+### Added
+- **TLA+ Formal Specification Phase (Phase 2B)**: Before any contract code is generated, a `spec-writer` agent produces a TLA+ formal specification of the contract's state machine. TLC (the official TLA+ model checker) exhaustively verifies every invariant. If violations are found, the agent repairs the spec in a feedback loop (up to 5 iterations) before proceeding. If the spec cannot be verified, codegen is blocked entirely.
+- `agents/spec-writer.md`: New agent specialized in OPNet TLA+ specs. Covers partial revert patterns, NativeSwap reservation system, queue-based DEX models, and balance conservation invariants.
+- `scripts/setup-tla.sh`: One-time TLC model checker download.
+- `scripts/verify-spec.sh`: Runs TLC against a spec, outputs structured JSON.
+- `scripts/parse-tlc-output.py`: Parses TLC stdout into machine-readable violation traces.
+- `scripts/run-spec-loop.sh`: Verification-repair loop with configurable max iterations.
+- `tools/tla/`: TLC jar location (downloaded by setup-tla.sh, gitignored).
+
+### Changed
+- `commands/buidl.md`: Phase 2 now includes Phase 2B (formal verification). Phase 3 is blocked if spec cannot be verified. Spec-writer added to max_turns table (15 turns).
+- `agents/opnet-contract-dev.md`: Must read and preserve verified spec invariants before writing any code.
+- `.gitignore`: Added `tools/tla/` for downloaded TLC jar.
+
+### Why
+TLA+ catches design-level bugs that tests cannot: race conditions between Bitcoin L1 state and contract state, partial revert edge cases, reservation ordering violations. These bugs exist in the requirements before any code is written. Tests only catch bugs in code that already exists. Formal verification catches the logical impossibilities upstream. Pattern from @KingBootoshi / Bootoshi (2026-03-14): agents generate the TLA+ spec, TLC verifies it, agents loop fixing it.
+
 ## [7.0.0] - 2026-03-13
 
 ### Added

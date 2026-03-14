@@ -11,6 +11,9 @@
 node_modules/
 package-lock.json
 
+# TLA+ tooling (downloaded by setup-tla.sh)
+tools/tla/
+
 # Env/secrets
 .env
 .env.*

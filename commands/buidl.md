@@ -413,9 +413,38 @@ Present all three documents to the user. Ask: "Here's the spec. Review it and le
 **This is a hard gate. Do NOT proceed until the user explicitly approves.**
 
 The user may:
-- Approve as-is → proceed to Phase 3
+- Approve as-is → proceed to Phase 2B (if OPNet contract) or Phase 3
 - Request changes → edit the documents and re-present
 - Cancel → stop the loop
+
+---
+
+### Phase 2B: Formal Specification (TLA+)
+
+**Condition:** Only runs when the project includes a contract component (detected from spec or challenge answers). Skip for frontend-only or generic projects.
+
+After requirements.md is generated and approved by the user:
+
+1. Ensure TLA+ tooling is available: `bash scripts/setup-tla.sh`
+2. Dispatch `spec-writer` agent (max_turns: 15) with `spec/requirements.md` as input
+3. Agent generates `artifacts/spec/<ContractName>.tla` and `artifacts/spec/<ContractName>.cfg`
+4. Run `bash scripts/run-spec-loop.sh artifacts/spec/<ContractName>.tla 5`
+5. If loop exits 0 (clean): proceed to Phase 3. Log: "Spec verified: N states checked, 0 violations"
+6. If loop exits 2 (violations found, iteration limit not reached):
+   - Read `artifacts/spec/repair-signal.json`
+   - Re-dispatch `spec-writer` with the violations file as explicit context
+   - Repeat from step 4
+7. If loop exits 1 (max iterations reached without clean spec):
+   - BLOCK Phase 3 entirely
+   - Report to user: "Specification could not be verified after 5 iterations. Design-level conflict detected. Requires human review."
+   - Dump `artifacts/spec/loop-log.md` for diagnosis
+   - Do NOT proceed to codegen on a failed spec
+
+**What the spec-writer does with violation feedback:**
+Agent receives: the original spec + the TLC counterexample trace + the violated invariant name.
+Agent must: identify which invariant is violated, trace through the counterexample to find the logical error in the design, fix the spec (not just add ASSUME statements to suppress the check), and explain the fix in a comment.
+
+FORBIDDEN: removing invariants to make TLC pass. Every invariant in the initial spec must survive to the final verified spec.
 
 **Checkpoint:** Write checkpoint.md with phases_completed=[challenge, specify], next_action="explore codebase".
 
@@ -572,6 +601,7 @@ For each agent in the plan, construct the prompt and pass the appropriate `max_t
 | Reviewers in critique mode (loop-reviewer) | 10 |
 | Explorers (loop-explorer) | 15 |
 | Researchers (loop-researcher) | 10 |
+| Spec Writers (spec-writer) | 15 |
 
 **Check elapsed time** before each agent dispatch. Read `started_at` and `max_duration` from state. If elapsed >= max_duration, checkpoint and stop.
 
