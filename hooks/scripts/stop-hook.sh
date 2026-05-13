@@ -157,6 +157,29 @@ if [[ "$VERDICT" == "PASS" ]]; then
 fi
 
 # If max cycles reached, stop
+# ── Async agent in-flight check ──
+# The orchestrator dispatches agents asynchronously (`run_in_background: true`)
+# and yields back to the user between completion notifications. Those yields
+# trigger this hook on every CC turn-end while the status is still "building".
+# Without this check, every idle turn increments `cycle`, escalates PUA pressure,
+# and can hit max_cycles BEFORE any real review-fail-fix cycle has occurred.
+#
+# Skip cycle increment if any agent is in_progress in state. The orchestrator
+# (or completion notifications) advance the cycle counter when real work
+# completes — not on every status-update turn while agents are running.
+IN_FLIGHT=$(grep -A 30 '^agent_status:' "$STATE_FILE" 2>/dev/null | grep ': in_progress' | head -1 || true)
+if [[ -n "$IN_FLIGHT" ]]; then
+  AGENT_NAME=$(echo "$IN_FLIGHT" | sed 's/^[[:space:]]*//' | awk -F: '{print $1}')
+  WAIT_PROMPT="Agent \"$AGENT_NAME\" is still running in the background. The loop will resume when it returns its completion notification.
+
+No cycle increment on this idle turn — only completed cycles of review-fail-fix advance the counter.
+
+If this hook is firing repeatedly without an agent actually being in flight, the orchestrator may have failed to clear agent_status on completion. Check artifacts/ for the agent's expected output file and manually run \`bash $SCRIPT_DIR/scripts/write-state.sh agent_status.$AGENT_NAME=complete\` if needed."
+  WAIT_JSON=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" <<< "$WAIT_PROMPT")
+  echo "{\"decision\": \"block\", \"reason\": $WAIT_JSON}" >&2
+  exit 2
+fi
+
 if [[ "$CYCLE" -ge "$MAX_CYCLES" ]]; then
   bash "$WRITE_STATE" status=failed current_phase=failed
   cat >&2 << STOP_MSG
